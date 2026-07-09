@@ -1,0 +1,192 @@
+# ==============================================================================
+# Photo Restore Pro - Docker Compose (desarrollo local)
+# ==============================================================================
+# Uso:
+#   cp .env.example .env   # editar valores
+#   docker-compose build
+#   docker-compose up -d
+#   docker-compose ps
+# ==============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # MariaDB - Base de datos relacional (usuarios, uploads, jobs, subscriptions)
+  # ---------------------------------------------------------------------------
+  mariadb:
+    image: mariadb:11
+    container_name: photo-restore-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./volumes/mariadb:/var/lib/mysql
+      - ./backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # Sin puertos expuestos: solo accesible dentro de photo-restore-network
+    networks:
+      - photo-restore-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Redis - Cache, sesiones, rate limiting y broker/backend de Celery
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: photo-restore-cache
+    restart: unless-stopped
+    volumes:
+      - ./volumes/redis:/data
+    # Sin puertos expuestos: solo accesible dentro de photo-restore-network
+    networks:
+      - photo-restore-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MongoDB - Histórico de jobs / workflows / respuestas de ComfyUI
+  # ---------------------------------------------------------------------------
+  mongodb:
+    # MongoDB 4.4 = última versión que NO requiere AVX (esta CPU no lo soporta).
+    # Nota: 4.4 está EOL; alternativa moderna sin AVX sería FerretDB (backed by Postgres).
+    image: mongo:4.4
+    container_name: photo-restore-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB}
+    volumes:
+      - ./volumes/mongodb:/data/db
+    # Sin puertos expuestos: solo accesible dentro de photo-restore-network
+    networks:
+      - photo-restore-network
+    healthcheck:
+      # 4.4 trae el shell legacy `mongo` (mongosh se introdujo en 5.0)
+      test: ["CMD", "mongo", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Backend - FastAPI (con --reload para desarrollo)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: photo-restore-backend
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=mysql+pymysql://${DB_USER}:${DB_PASSWORD}@mariadb:3306/${DB_NAME}
+      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB}?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+      - ./volumes/uploads:/app/uploads
+      - ./volumes/processed:/app/processed
+    # Sin puertos expuestos: el frontend lo alcanza vía red interna (backend:8000)
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - photo-restore-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health').status==200 else sys.exit(1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker - Procesamiento async (restauración de imágenes)
+  # ---------------------------------------------------------------------------
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: photo-restore-celery
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=mysql+pymysql://${DB_USER}:${DB_PASSWORD}@mariadb:3306/${DB_NAME}
+      - MONGODB_URL=mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB}?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+      - ./volumes/uploads:/app/uploads
+      - ./volumes/processed:/app/processed
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - photo-restore-network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.workers.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Frontend - React + Vite dev server
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: photo-restore-frontend
+    restart: unless-stopped
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+    # ÚNICO servicio expuesto al host. El reverse proxy externo (red doméstica)
+    # apunta a este puerto y lo asocia al subdominio.
+    # Puerto host 5273 elegido por estar libre en esta máquina (el 5173 ya se usa).
+    ports:
+      - "5273:5173"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - photo-restore-network
+    healthcheck:
+      # 127.0.0.1 (no localhost): Vite escucha en IPv4 y busybox-wget resuelve
+      # localhost a IPv6 (::1) primero, dando "connection refused".
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  photo-restore-network:
+    driver: bridge

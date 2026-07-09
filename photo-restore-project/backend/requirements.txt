@@ -1,0 +1,51 @@
+# ==============================================================================
+# Photo Restore Pro - Backend dependencies
+# ==============================================================================
+
+# --- Web framework -----------------------------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+websockets==14.1
+
+# --- Config / validation -----------------------------------------------------
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+email-validator==2.2.0        # requerido por pydantic EmailStr
+
+# --- Relational DB (MariaDB) -------------------------------------------------
+sqlalchemy==2.0.36
+pymysql==1.1.1
+alembic==1.14.0
+
+# --- MongoDB -----------------------------------------------------------------
+# motor 3.6.0 requiere pymongo >=4.9,<4.10
+pymongo==4.9.2
+motor==3.6.0
+
+# --- Redis / Cache -----------------------------------------------------------
+redis==5.2.1
+
+# --- Task queue --------------------------------------------------------------
+celery==5.4.0
+
+# --- Auth / Security ---------------------------------------------------------
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.1                  # usado directamente (passlib está sin mantenimiento)
+cryptography==44.0.0
+
+# --- Image processing --------------------------------------------------------
+pillow==11.1.0
+opencv-python-headless==4.10.0.84
+
+# --- HTTP / LLM integrations -------------------------------------------------
+httpx==0.28.1
+openai==1.59.6
+anthropic==0.42.0
+
+# --- Dev / Testing -----------------------------------------------------------
+pytest==8.3.4
+pytest-asyncio==0.25.2
+mypy==1.14.1
+ruff==0.8.6
