@@ -1,25 +1,24 @@
 import { Routes, Route } from 'react-router-dom'
 import { MainLayout } from './components/Layout/MainLayout'
+import { ProtectedRoute } from './components/Auth/ProtectedRoute'
+import { LoginPage } from './pages/LoginPage'
 import { HomePage } from './pages/HomePage'
 import { DashboardPage } from './pages/DashboardPage'
-import { EditorPage } from './pages/EditorPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
-/**
- * Esqueleto de routing de la aplicación.
- *
- * TODO: envolver rutas privadas con <ProtectedRoute> y añadir /login, /register.
- */
+/** Routing: /login público, el resto protegido tras autenticación. */
 function App() {
   return (
     <Routes>
-      <Route element={<MainLayout />}>
-        <Route index element={<HomePage />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="editor" element={<EditorPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="*" element={<NotFoundPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route index element={<HomePage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
       </Route>
     </Routes>
   )
