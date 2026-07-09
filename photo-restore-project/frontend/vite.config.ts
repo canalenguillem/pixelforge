@@ -29,6 +29,7 @@ export default defineConfig({
       '/api': {
         target: 'http://backend:8000',
         changeOrigin: true,
+        ws: true, // proxya también el WebSocket de progreso (/jobs/{id}/stream)
       },
     },
     // HMR a través del proxy en un subdominio con HTTPS. Descomentar y ajustar

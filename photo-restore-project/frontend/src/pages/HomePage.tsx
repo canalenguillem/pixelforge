@@ -3,7 +3,7 @@ import { Loader2, RotateCcw, Download, Sparkles } from 'lucide-react'
 import { UploadZone } from '@/components/Upload/UploadZone'
 import { BeforeAfterSlider } from '@/components/Editor/BeforeAfterSlider'
 import { uploadService } from '@/services/upload.service'
-import { jobService } from '@/services/job.service'
+import { jobService, waitForJob } from '@/services/job.service'
 import { apiError } from '@/services/api'
 import type { Upload } from '@/types'
 
@@ -20,6 +20,7 @@ export function HomePage() {
 
   const [strength, setStrength] = useState(0.35)
   const [fidelity, setFidelity] = useState(0.5)
+  const [progress, setProgress] = useState(0)
 
   async function handleFile(file: File) {
     setError(null)
@@ -39,6 +40,7 @@ export function HomePage() {
   async function handleRestore() {
     if (!upload) return
     setError(null)
+    setProgress(0)
     setPhase('processing')
     try {
       const job = await jobService.create({
@@ -46,12 +48,12 @@ export function HomePage() {
         restoration_strength: strength,
         codeformer_fidelity: fidelity,
       })
-      if (job.status !== 'completed') {
-        throw new Error(job.error_message || 'El procesamiento falló')
-      }
+      // Espera async con progreso en vivo (WebSocket, con fallback a polling).
+      await waitForJob(job.id, setProgress)
+      const final = await jobService.get(job.id)
       const blob = await jobService.result(job.id)
       setAfterUrl(URL.createObjectURL(blob))
-      setElapsed(job.processing_time_seconds)
+      setElapsed(final.processing_time_seconds)
       setPhase('done')
     } catch (err) {
       setError(apiError(err, 'La restauración falló'))
@@ -144,9 +146,19 @@ export function HomePage() {
               </button>
             </div>
             {phase === 'processing' && (
-              <p className="text-center text-xs text-muted-foreground">
-                Procesando en ComfyUI (la primera vez carga los modelos, puede tardar).
-              </p>
+              <div className="space-y-1.5">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${Math.round(progress * 100)}%` }}
+                  />
+                </div>
+                <p className="text-center text-xs text-muted-foreground">
+                  {progress > 0
+                    ? `Procesando en ComfyUI… ${Math.round(progress * 100)}%`
+                    : 'En cola / cargando modelos…'}
+                </p>
+              </div>
             )}
           </div>
         </div>

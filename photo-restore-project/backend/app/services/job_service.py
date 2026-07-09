@@ -33,6 +33,33 @@ def _resolve_comfyui(user_id: int) -> tuple[str, str | None]:
     return settings.COMFYUI_DEFAULT_URL, (settings.COMFYUI_API_KEY or None)
 
 
+def enqueue_restoration(
+    db: Session,
+    user_id: int,
+    upload_id: int,
+    restoration_strength: float = 0.35,
+    codeformer_fidelity: float = 0.5,
+) -> ProcessingJob:
+    """Crea el job (queued) y lo encola en Celery para procesamiento async."""
+    upload = upload_service.get_upload(db, user_id, upload_id)  # valida propiedad (404 si no)
+
+    job = ProcessingJob(
+        user_id=user_id,
+        upload_id=upload.id,
+        status=JobStatus.QUEUED.value,
+        job_type=JobType.RESTORATION.value,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    # Import perezoso para evitar ciclos (tasks importa services).
+    from app.workers.tasks import process_restoration_job
+
+    process_restoration_job.delay(job.id, restoration_strength, codeformer_fidelity)
+    return job
+
+
 def get_job(db: Session, user_id: int, job_id: int) -> ProcessingJob:
     job = db.get(ProcessingJob, job_id)
     if job is None or job.user_id != user_id:

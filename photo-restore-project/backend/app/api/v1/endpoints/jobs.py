@@ -1,16 +1,23 @@
-"""Endpoints de jobs de procesamiento (crear, listar, estado, resultado, borrar).
+"""Endpoints de jobs de procesamiento (crear, listar, estado, resultado, stream).
 
-El procesamiento es SÍNCRONO por ahora (se moverá a Celery + WebSocket).
-Todas las rutas requieren autenticación y operan solo sobre jobs propios.
+El procesamiento es ASÍNCRONO (Celery). `POST /jobs` encola y responde 202;
+el progreso en tiempo real llega por el WebSocket `/jobs/{id}/stream`.
 """
 
+import json
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+import redis.asyncio as aioredis
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse
+from jose import JWTError
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.config import settings
+from app.core.security import ACCESS_TOKEN_TYPE, decode_token
+from app.db.session import SessionLocal
+from app.models.job import ProcessingJob
 from app.schemas.job import JobCreate, JobListResponse, JobRead
 from app.services import job_service
 from app.utils.exceptions import AppError
@@ -18,10 +25,10 @@ from app.utils.exceptions import AppError
 router = APIRouter()
 
 
-@router.post("", response_model=JobRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=JobRead, status_code=status.HTTP_202_ACCEPTED)
 def create_job(data: JobCreate, current_user: CurrentUser, db: DbSession) -> JobRead:
-    """Crea y procesa un job de restauración sobre un upload propio."""
-    job = job_service.create_and_run(
+    """Encola un job de restauración (async). Devuelve el job en estado 'queued'."""
+    job = job_service.enqueue_restoration(
         db,
         current_user.id,
         data.upload_id,
@@ -50,7 +57,7 @@ def list_jobs(
 
 @router.get("/{job_id}", response_model=JobRead)
 def get_job(job_id: int, current_user: CurrentUser, db: DbSession) -> JobRead:
-    """Estado/detalle de un job propio."""
+    """Estado/detalle de un job propio (para polling)."""
     return JobRead.model_validate(job_service.get_job(db, current_user.id, job_id))
 
 
@@ -73,3 +80,75 @@ def get_job_result(job_id: int, current_user: CurrentUser, db: DbSession) -> Fil
 def delete_job(job_id: int, current_user: CurrentUser, db: DbSession) -> None:
     """Elimina un job propio (resultado + registro)."""
     job_service.delete_job(db, current_user.id, job_id)
+
+
+@router.websocket("/{job_id}/stream")
+async def job_stream(
+    websocket: WebSocket,
+    job_id: int,
+    token: Annotated[str, Query(description="Access token JWT")],
+) -> None:
+    """WebSocket de progreso en tiempo real de un job.
+
+    Auth por query param `token` (el navegador no puede poner headers en un WS).
+    Reenvía los eventos publicados por el worker en `job:{id}:progress`.
+    """
+    # 1) Autenticación
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != ACCESS_TOKEN_TYPE or payload.get("sub") is None:
+            raise JWTError("token inválido")
+        user_id = int(payload["sub"])
+    except (JWTError, ValueError):
+        await websocket.close(code=4401)
+        return
+
+    # 2) Propiedad del job
+    db = SessionLocal()
+    try:
+        job = db.get(ProcessingJob, job_id)
+        if job is None or job.user_id != user_id:
+            await websocket.close(code=4404)
+            return
+    finally:
+        db.close()
+
+    await websocket.accept()
+    redis = aioredis.from_url(settings.REDIS_URL)
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(f"job:{job_id}:progress")
+    try:
+        # Si el job ya terminó antes de suscribirnos, emitir estado final y cerrar.
+        db = SessionLocal()
+        try:
+            fresh = db.get(ProcessingJob, job_id)
+            if fresh and fresh.status in ("completed", "failed"):
+                await websocket.send_text(
+                    json.dumps({"status": fresh.status, "error": fresh.error_message})
+                )
+                return
+        finally:
+            db.close()
+
+        async for message in pubsub.listen():
+            if message.get("type") != "message":
+                continue
+            data = message["data"]
+            if isinstance(data, bytes):
+                data = data.decode()
+            await websocket.send_text(data)
+            try:
+                if json.loads(data).get("status") in ("completed", "failed"):
+                    break
+            except json.JSONDecodeError:
+                pass
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await pubsub.unsubscribe(f"job:{job_id}:progress")
+        await pubsub.aclose()
+        await redis.aclose()
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass

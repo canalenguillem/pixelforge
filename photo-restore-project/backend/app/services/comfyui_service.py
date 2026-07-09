@@ -12,10 +12,15 @@ La orquestación (crear job, esperar, guardar resultado) vive en job_service /
 el worker de Celery, no aquí.
 """
 
+import asyncio
+import json
 import time
+import uuid
+from collections.abc import Callable
 from typing import Any
 
 import httpx
+import websockets
 
 from app.utils.exceptions import AppError
 
@@ -163,6 +168,75 @@ def _extract_output_images(history_entry: dict[str, Any]) -> list[dict[str, str]
                     }
                 )
     return images
+
+
+# -----------------------------------------------------------------------------
+# 4-bis) Ejecutar con progreso en vivo (WebSocket de ComfyUI)
+# -----------------------------------------------------------------------------
+def run_with_progress(
+    base_url: str,
+    workflow: dict[str, Any],
+    api_key: str | None = None,
+    on_progress: Callable[[int, int, str | None], None] | None = None,
+    timeout: float = 600.0,
+) -> list[dict[str, str]]:
+    """Encola el workflow y escucha el WS de ComfyUI para progreso en vivo.
+
+    Devuelve las imágenes de salida. `on_progress(value, maximum, node)` se
+    invoca en cada paso del sampler. Pensado para el worker de Celery.
+    """
+    return asyncio.run(_run_with_progress(base_url, workflow, api_key, on_progress, timeout))
+
+
+async def _run_with_progress(
+    base_url: str,
+    workflow: dict[str, Any],
+    api_key: str | None,
+    on_progress: Callable[[int, int, str | None], None] | None,
+    timeout: float,
+) -> list[dict[str, str]]:
+    client_id = uuid.uuid4().hex
+    ws_url = (
+        base_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
+        + f"/ws?clientId={client_id}"
+    )
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+    prompt_id: str | None = None
+    try:
+        async with websockets.connect(
+            ws_url, additional_headers=headers, max_size=None, open_timeout=15
+        ) as ws:
+            # Encolar el prompt asociándolo a este client_id (para recibir su progreso).
+            prompt_id = submit_prompt(base_url, workflow, client_id=client_id, api_key=api_key)
+
+            async with asyncio.timeout(timeout):
+                async for message in ws:
+                    if isinstance(message, bytes):
+                        continue  # imágenes de preview binarias: ignorar
+                    data = json.loads(message)
+                    mtype = data.get("type")
+                    d = data.get("data") or {}
+                    if mtype == "progress" and on_progress:
+                        if d.get("prompt_id") in (None, prompt_id):
+                            on_progress(int(d.get("value", 0)), int(d.get("max", 1)), d.get("node"))
+                    elif (
+                        mtype == "executing"
+                        and d.get("node") is None
+                        and d.get("prompt_id") == prompt_id
+                    ):
+                        break
+                    elif mtype == "execution_error" and d.get("prompt_id") == prompt_id:
+                        raise AppError(
+                            f"ComfyUI error: {d.get('exception_message', 'desconocido')}", 502
+                        )
+    except (OSError, websockets.WebSocketException) as exc:
+        raise AppError(f"Error en el WebSocket de ComfyUI: {exc}", 502)
+    except TimeoutError:
+        raise AppError(f"Timeout esperando a ComfyUI ({timeout:.0f}s)", 504)
+
+    history = get_history(base_url, prompt_id, api_key)
+    return _extract_output_images(history.get(prompt_id, {}))
 
 
 # -----------------------------------------------------------------------------
