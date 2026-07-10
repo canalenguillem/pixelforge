@@ -37,10 +37,13 @@ def enqueue_restoration(
     db: Session,
     user_id: int,
     upload_id: int,
+    workflow_mode: str = "epic",
     restoration_strength: float = 0.35,
     codeformer_fidelity: float = 0.5,
+    flux_denoise: float = 0.85,
+    enable_hdr_lora: bool = False,
 ) -> ProcessingJob:
-    """Crea el job (queued) y lo encola en Celery para procesamiento async."""
+    """Crea el job (queued) y lo encola en Celery. Enruta por `workflow_mode`."""
     upload = upload_service.get_upload(db, user_id, upload_id)  # valida propiedad (404 si no)
 
     job = ProcessingJob(
@@ -48,6 +51,7 @@ def enqueue_restoration(
         upload_id=upload.id,
         status=JobStatus.QUEUED.value,
         job_type=JobType.RESTORATION.value,
+        workflow_mode=workflow_mode,
     )
     db.add(job)
     db.commit()
@@ -56,7 +60,14 @@ def enqueue_restoration(
     # Import perezoso para evitar ciclos (tasks importa services).
     from app.workers.tasks import process_restoration_job
 
-    process_restoration_job.delay(job.id, restoration_strength, codeformer_fidelity)
+    process_restoration_job.delay(
+        job.id,
+        workflow_mode=workflow_mode,
+        restoration_strength=restoration_strength,
+        codeformer_fidelity=codeformer_fidelity,
+        flux_denoise=flux_denoise,
+        enable_hdr_lora=enable_hdr_lora,
+    )
     return job
 
 

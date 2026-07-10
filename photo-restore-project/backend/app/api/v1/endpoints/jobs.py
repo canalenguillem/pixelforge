@@ -32,8 +32,11 @@ def create_job(data: JobCreate, current_user: CurrentUser, db: DbSession) -> Job
         db,
         current_user.id,
         data.upload_id,
+        workflow_mode=data.workflow_mode.value,
         restoration_strength=data.restoration_strength,
         codeformer_fidelity=data.codeformer_fidelity,
+        flux_denoise=data.flux_denoise,
+        enable_hdr_lora=data.enable_hdr_lora,
     )
     return JobRead.model_validate(job)
 

@@ -29,11 +29,14 @@ export interface Upload {
 
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
+export type WorkflowMode = 'epic' | 'flux'
+
 export interface Job {
   id: number
   upload_id: number
   status: JobStatus
   job_type: string | null
+  workflow_mode: WorkflowMode
   error_message: string | null
   processing_time_seconds: number | null
   created_at: string

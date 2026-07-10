@@ -24,13 +24,20 @@ def _publish(job_id: int, payload: dict) -> None:
     get_redis().publish(f"job:{job_id}:progress", json.dumps(payload))
 
 
+# Flux es mucho más lento y su carga en frío puede tardar varios minutos.
+_FLUX_TIMEOUT = 1200.0
+
+
 @celery_app.task(name="process_restoration_job")
 def process_restoration_job(
     job_id: int,
+    workflow_mode: str = "epic",
     restoration_strength: float = 0.35,
     codeformer_fidelity: float = 0.5,
+    flux_denoise: float = 0.85,
+    enable_hdr_lora: bool = False,
 ) -> None:
-    """Procesa un job de restauración contra ComfyUI, publicando progreso."""
+    """Procesa un job de restauración contra ComfyUI, enrutando por workflow_mode."""
     db = SessionLocal()
     started = time.monotonic()
     try:
@@ -58,17 +65,27 @@ def process_restoration_job(
 
         _publish(job_id, {"status": "processing", "stage": "generating", "progress": 0})
 
-        work_w, work_h = workflows.work_dimensions(upload.width or 1024, upload.height or 1024)
-        workflow = workflows.build_restoration_workflow(
-            comfy_name, work_w, work_h,
-            denoise=restoration_strength, codeformer_fidelity=codeformer_fidelity,
-        )
+        # Routing por modo de workflow
+        timeout = 600.0
+        if workflow_mode == "flux":
+            workflow = workflows.build_restoration_flux_workflow(
+                comfy_name, denoise=flux_denoise, enable_hdr_lora=enable_hdr_lora
+            )
+            timeout = _FLUX_TIMEOUT
+        else:  # epic (default)
+            work_w, work_h = workflows.work_dimensions(upload.width or 1024, upload.height or 1024)
+            workflow = workflows.build_restoration_workflow(
+                comfy_name, work_w, work_h,
+                denoise=restoration_strength, codeformer_fidelity=codeformer_fidelity,
+            )
 
         def on_progress(value: int, maximum: int, _node: str | None) -> None:
             pct = round(value / maximum, 3) if maximum else 0
             _publish(job_id, {"status": "processing", "stage": "generating", "progress": pct})
 
-        images = comfyui_service.run_with_progress(server_url, workflow, api_key, on_progress)
+        images = comfyui_service.run_with_progress(
+            server_url, workflow, api_key, on_progress, timeout=timeout
+        )
         if not images:
             raise RuntimeError("ComfyUI no devolvió ninguna imagen")
 

@@ -27,6 +27,13 @@ class JobType(str, Enum):
     INPAINT = "inpaint"
 
 
+class WorkflowMode(str, Enum):
+    """Modo de restauración: Epic (SD1.5 rápido) o Flux Kontext (calidad superior)."""
+
+    EPIC = "epic"
+    FLUX = "flux"
+
+
 class LLMProvider(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"

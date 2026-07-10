@@ -16,7 +16,8 @@ manchas → comparar antes/después → descargar, con procesamiento asíncrono 
 | Scaffolding (backend/frontend/compose/BDs) | ✅ | 6 servicios healthy |
 | Auth JWT | ✅ | register, login, refresh, logout (revocación en Redis), `/me` |
 | Uploads | ✅ | multipart, validación (ext+tamaño+imagen real con Pillow), storage, aislamiento por usuario |
-| Restauración ComfyUI | ✅ | difusión img2img + **Tile ControlNet** + **CodeFormer** (caras) + RealESRGAN x2 |
+| Restauración ComfyUI — **Epic** | ✅ | difusión img2img + **Tile ControlNet** + **CodeFormer** (caras) + RealESRGAN x2 (rápido ~12s) |
+| Restauración ComfyUI — **Flux** | ✅ | **Flux Kontext** GGUF (`flux1-kontext-dev-Q6_K`) + ReferenceLatent + FluxGuidance + RealESRGAN. Calidad superior, coloriza; lento (~2min caliente, ~8min frío, ~14GB VRAM) |
 | Inpainting (quitar manchas) | ✅ | **LaMa** (`big-lama`), rellena solo lo enmascarado, resto pixel-idéntico |
 | Async (Celery + WebSocket) | ✅ | `POST /jobs` responde 202; progreso real del sampler vía WS de ComfyUI → Redis pub/sub → WS al cliente |
 | Frontend completo | ✅ | login/registro, drag&drop, sliders, **editor de máscara con pincel**, visor antes/después, barra de progreso |
@@ -77,8 +78,9 @@ Navegador ──5273──> Frontend (Vite dev) ──/api proxy──> Backend 
 | `codeformer.pth` | `models\facerestore_models\` | Restauración de caras |
 | `detection_Resnet50_Final.pth`, `parsing_parsenet.pth` | `models\facedetection\` | Detección/parsing de caras (facerestore_cf) |
 | `big-lama.pt` | `models\inpaint\` | Inpainting (quitar manchas) |
-| Checkpoints: `epicrealism.safetensors` (usado), absolutereality, v1-5-pruned | `models\checkpoints\` | img2img de restauración |
+| Checkpoints: `epicrealism.safetensors` (usado), absolutereality, v1-5-pruned | `models\checkpoints\` | img2img de restauración (Epic) |
 | `RealESRGAN_x2.pth` | `models\upscale_models\` | Upscale x2 |
+| `flux1-kontext-dev-Q6_K.gguf` + `clip_l`/`t5xxl_fp8` + `ae.safetensors` | `models\{unet_gguf,clip,vae}\` | **Flux Kontext** (modo flux). Nodo `ComfyUI-GGUF` ya instalado. HDR LoRA NO instalada (opción no-op) |
 
 Custom node añadido: **`facerestore_cf`** (en `custom_nodes\`, deps instaladas en su venv). El pack `comfyui-inpaint-nodes` ya estaba.
 

@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
     user_id BIGINT NOT NULL,
     upload_id BIGINT NOT NULL,
     status VARCHAR(50) DEFAULT 'queued',     -- queued | processing | completed | failed
-    job_type VARCHAR(100),                   -- restoration | enhancement | upscale
+    job_type VARCHAR(100),                   -- restoration | enhancement | upscale | inpaint
+    workflow_mode VARCHAR(20) NOT NULL DEFAULT 'epic', -- epic | flux (solo restauración)
     processed_image_path VARCHAR(1000),
     error_message TEXT,
     processing_time_seconds INT,

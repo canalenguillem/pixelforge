@@ -1,11 +1,16 @@
 import { api } from './api'
 import { useAuthStore } from '@/store/authStore'
-import type { Job } from '@/types'
+import type { Job, WorkflowMode } from '@/types'
 
 export interface CreateJobPayload {
   upload_id: number
+  workflow_mode?: WorkflowMode
+  // Epic
   restoration_strength?: number
   codeformer_fidelity?: number
+  // Flux
+  flux_denoise?: number
+  enable_hdr_lora?: boolean
 }
 
 export const jobService = {

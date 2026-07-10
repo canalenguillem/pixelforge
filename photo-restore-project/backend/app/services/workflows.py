@@ -24,8 +24,22 @@ TILE_CONTROLNET = "SD1.5\\control_v11f1e_sd15_tile_fp16.safetensors"
 FACE_DETECTION = "retinaface_resnet50"
 INPAINT_MODEL = "big-lama.pt"
 
+# --- Flux Kontext (GGUF) ---
+FLUX_UNET_GGUF = "flux1-kontext-dev-Q6_K.gguf"
+FLUX_CLIP_L = "clip_l.safetensors"
+FLUX_CLIP_T5 = "t5xxl_fp8_e4m3fn_scaled.safetensors"
+FLUX_VAE = "ae.safetensors"
+FLUX_HDR_LORA = ""  # nombre del fichero de LoRA HDR; vacío = no instalada (se ignora enable_hdr_lora)
+
 OUTPUT_PREFIX = "photorestore/restored"
 INPAINT_PREFIX = "photorestore/inpaint"
+FLUX_PREFIX = "photorestore/flux"
+
+FLUX_RESTORE_PROMPT = (
+    "Restore this old damaged photograph: remove stains, scratches and dust, "
+    "sharpen and enhance clarity and fine detail, natural realistic result, "
+    "keep the people, their faces and the composition unchanged"
+)
 
 DEFAULT_POSITIVE = (
     "restored vintage black and white photograph, monochrome, sharp focus, "
@@ -133,6 +147,82 @@ def build_restoration_workflow(
             "inputs": {"images": ["fr", 0], "filename_prefix": OUTPUT_PREFIX},
         },
     }
+
+
+def build_restoration_flux_workflow(
+    image_name: str,
+    denoise: float = 0.85,
+    enable_hdr_lora: bool = False,
+    guidance: float = 2.5,
+    steps: int = 20,
+    seed: int = 42,
+    positive: str = FLUX_RESTORE_PROMPT,
+) -> dict[str, Any]:
+    """Workflow de restauración con Flux Kontext (GGUF) — calidad superior.
+
+    Flux Kontext es un modelo de EDICIÓN por instrucción: la imagen original se
+    aporta como referencia (ReferenceLatent) y el prompt describe la restauración.
+    A `denoise` alto (~0.85-1.0) restaura de verdad preservando a las personas;
+    por debajo de 0.5 apenas cambia. cfg=1 + FluxGuidance (Flux no usa CFG clásico).
+
+    Nota: mucho más lento y pesado que Epic (~14 GB en VRAM).
+    """
+    wf: dict[str, Any] = {
+        "unet": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": FLUX_UNET_GGUF}},
+        "clip": {
+            "class_type": "DualCLIPLoader",
+            "inputs": {"clip_name1": FLUX_CLIP_L, "clip_name2": FLUX_CLIP_T5, "type": "flux"},
+        },
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FLUX_VAE}},
+        "load": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+        "scale": {"class_type": "FluxKontextImageScale", "inputs": {"image": ["load", 0]}},
+        "encode": {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": ["vae", 0]}},
+        "pos": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["clip", 0], "text": positive}},
+        "ref": {
+            "class_type": "ReferenceLatent",
+            "inputs": {"conditioning": ["pos", 0], "latent": ["encode", 0]},
+        },
+        "guide": {
+            "class_type": "FluxGuidance",
+            "inputs": {"conditioning": ["ref", 0], "guidance": guidance},
+        },
+        "neg": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}},
+        "ks": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["unet", 0],
+                "seed": seed,
+                "steps": steps,
+                "cfg": 1.0,
+                "sampler_name": "euler",
+                "scheduler": "simple",
+                "positive": ["guide", 0],
+                "negative": ["neg", 0],
+                "latent_image": ["encode", 0],
+                "denoise": denoise,
+            },
+        },
+        "dec": {"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}},
+        "upm": {"class_type": "UpscaleModelLoader", "inputs": {"model_name": UPSCALE_MODEL}},
+        "ups": {
+            "class_type": "ImageUpscaleWithModel",
+            "inputs": {"upscale_model": ["upm", 0], "image": ["dec", 0]},
+        },
+        "save": {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["ups", 0], "filename_prefix": FLUX_PREFIX},
+        },
+    }
+
+    # HDR LoRA opcional (solo si hay un fichero configurado; si no, se ignora).
+    if enable_hdr_lora and FLUX_HDR_LORA:
+        wf["lora"] = {
+            "class_type": "LoraLoaderModelOnly",
+            "inputs": {"model": ["unet", 0], "lora_name": FLUX_HDR_LORA, "strength_model": 1.0},
+        }
+        wf["ks"]["inputs"]["model"] = ["lora", 0]
+
+    return wf
 
 
 def build_inpaint_workflow(image_name: str, mask_name: str, grow: int = 8) -> dict[str, Any]:

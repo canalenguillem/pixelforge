@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
-import { Loader2, RotateCcw, Download, Sparkles, Eraser, Brush, Trash2 } from 'lucide-react'
+import { Loader2, RotateCcw, Download, Sparkles, Eraser, Brush, Trash2, Zap } from 'lucide-react'
 import { UploadZone } from '@/components/Upload/UploadZone'
 import { BeforeAfterSlider } from '@/components/Editor/BeforeAfterSlider'
 import { MaskEditor, type MaskEditorHandle } from '@/components/Editor/MaskEditor'
 import { uploadService } from '@/services/upload.service'
-import { jobService, waitForJob } from '@/services/job.service'
+import { jobService, waitForJob, type CreateJobPayload } from '@/services/job.service'
 import { apiError } from '@/services/api'
-import type { Upload } from '@/types'
+import type { Upload, WorkflowMode } from '@/types'
 
 type Phase = 'idle' | 'uploading' | 'ready' | 'processing' | 'done'
 type Mode = 'restore' | 'inpaint'
@@ -21,8 +21,11 @@ export function HomePage() {
   const [upload, setUpload] = useState<Upload | null>(null)
   const [elapsed, setElapsed] = useState<number | null>(null)
 
+  const [engine, setEngine] = useState<WorkflowMode>('epic')
   const [strength, setStrength] = useState(0.35)
   const [fidelity, setFidelity] = useState(0.5)
+  const [fluxDenoise, setFluxDenoise] = useState(0.85)
+  const [enableHdr, setEnableHdr] = useState(false)
   const [brushSize, setBrushSize] = useState(24)
   const [progress, setProgress] = useState(0)
 
@@ -64,10 +67,11 @@ export function HomePage() {
 
   function handleRestore() {
     if (!upload) return
-    void runJob(
-      () => jobService.create({ upload_id: upload.id, restoration_strength: strength, codeformer_fidelity: fidelity }),
-      'La restauración falló',
-    )
+    const payload: CreateJobPayload =
+      engine === 'flux'
+        ? { upload_id: upload.id, workflow_mode: 'flux', flux_denoise: fluxDenoise, enable_hdr_lora: enableHdr }
+        : { upload_id: upload.id, workflow_mode: 'epic', restoration_strength: strength, codeformer_fidelity: fidelity }
+    void runJob(() => jobService.create(payload), 'La restauración falló')
   }
 
   async function handleInpaint() {
@@ -131,18 +135,51 @@ export function HomePage() {
           <div className="space-y-4 rounded-xl border border-border p-5">
             {mode === 'restore' ? (
               <>
-                <Slider
-                  label="Fuerza de restauración"
-                  hint={strength < 0.32 ? 'fiel' : strength > 0.42 ? 'agresiva' : 'equilibrada'}
-                  min={0.2} max={0.5} step={0.05} value={strength} onChange={setStrength} disabled={processing}
-                  format={(v) => v.toFixed(2)}
-                />
-                <Slider
-                  label="Fidelidad de rostros"
-                  hint={fidelity <= 0.5 ? 'más calidad' : 'más fiel'}
-                  min={0} max={1} step={0.1} value={fidelity} onChange={setFidelity} disabled={processing}
-                  format={(v) => v.toFixed(2)}
-                />
+                {/* Motor de restauración */}
+                <div className="flex gap-2 rounded-lg bg-muted p-1">
+                  <ModeTab active={engine === 'epic'} disabled={processing} onClick={() => setEngine('epic')} icon={Sparkles} label="Epic · rápido" />
+                  <ModeTab active={engine === 'flux'} disabled={processing} onClick={() => setEngine('flux')} icon={Zap} label="Flux · calidad" />
+                </div>
+
+                {engine === 'epic' ? (
+                  <>
+                    <Slider
+                      label="Fuerza de restauración"
+                      hint={strength < 0.32 ? 'fiel' : strength > 0.42 ? 'agresiva' : 'equilibrada'}
+                      min={0.2} max={0.5} step={0.05} value={strength} onChange={setStrength} disabled={processing}
+                      format={(v) => v.toFixed(2)}
+                    />
+                    <Slider
+                      label="Fidelidad de rostros"
+                      hint={fidelity <= 0.5 ? 'más calidad' : 'más fiel'}
+                      min={0} max={1} step={0.1} value={fidelity} onChange={setFidelity} disabled={processing}
+                      format={(v) => v.toFixed(2)}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Slider
+                      label="Fuerza de restauración"
+                      hint={fluxDenoise < 0.7 ? 'sutil' : fluxDenoise >= 0.95 ? 'completa' : 'fuerte'}
+                      min={0.5} max={1} step={0.05} value={fluxDenoise} onChange={setFluxDenoise} disabled={processing}
+                      format={(v) => v.toFixed(2)}
+                    />
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={enableHdr}
+                        disabled={processing}
+                        onChange={(e) => setEnableHdr(e.target.checked)}
+                        className="accent-primary"
+                      />
+                      HDR LoRA (más vibrancia)
+                    </label>
+                    <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                      Flux da mayor calidad pero es bastante más lento (~2 min, o más la primera vez).
+                      Puede tomar libertades con la identidad y coloriza.
+                    </p>
+                  </>
+                )}
               </>
             ) : (
               <div className="flex items-center gap-4">

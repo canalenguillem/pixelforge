@@ -26,6 +26,7 @@ class ProcessingJob(Base):
         String(50), default=JobStatus.QUEUED.value, nullable=False, index=True
     )
     job_type: Mapped[str | None] = mapped_column(String(100), default=JobType.RESTORATION.value)
+    workflow_mode: Mapped[str] = mapped_column(String(20), default="epic", nullable=False)
     processed_image_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     processing_time_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
