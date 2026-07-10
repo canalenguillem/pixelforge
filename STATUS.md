@@ -22,8 +22,8 @@ manchas → comparar antes/después → descargar, con procesamiento asíncrono 
 | Frontend completo | ✅ | login/registro, drag&drop, sliders, **editor de máscara con pincel**, visor antes/después, barra de progreso |
 
 ### Estado en git
-- `0f00796` base · `e5d880b` frontend · `eab1add` async (**último pusheado**)
-- ⚠️ **La feature de inpainting está construida pero SIN commitear** (backend + frontend). Falta `git add/commit/push`.
+- `0f00796` base · `e5d880b` frontend · `eab1add` async · `876e10c` inpaint + este STATUS (**último pusheado**)
+- Todo lo implementado está commiteado y en `origin/main`.
 
 ---
 
@@ -159,8 +159,7 @@ Frontend: `src/{pages,components/{Auth,Upload,Editor,Layout},services,store,type
 
 ## 9. Próximos pasos (roadmap sugerido)
 
-1. **Commitear + pushear la feature de inpainting** (pendiente).
-2. **Histórico en MongoDB** (`jobs_history`): guardar workflow/respuesta/metadatos por job. Motor/pymongo ya en requirements; falta el cliente Mongo y escribir en el flujo.
+1. **Histórico en MongoDB** (`jobs_history`): guardar workflow/respuesta/metadatos por job. Motor/pymongo ya en requirements; falta el cliente Mongo y escribir en el flujo.
 3. **Config ComfyUI por usuario**: usar la tabla `comfyui_config` (ya en el schema) en `job_service._resolve_comfyui` en vez del default global. Ídem API keys de LLM (`user_api_keys`, encriptar con Fernet — `ENCRYPTION_KEY` en env).
 4. **Encadenar inpaint → restauración** en un solo job.
 5. **Pulir UI**: header/sidebar, galería de jobs anteriores (`GET /jobs`), página de ajustes.
