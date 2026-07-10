@@ -4,6 +4,7 @@ import type { Job, WorkflowMode } from '@/types'
 
 export interface CreateJobPayload {
   upload_id: number
+  parent_job_id?: number // encadenado: procesar el resultado de otro job
   workflow_mode?: WorkflowMode
   // Epic
   restoration_strength?: number
@@ -21,11 +22,12 @@ export const jobService = {
   },
 
   /** Encola un job de inpaint (eliminar daño) con máscara. */
-  async createInpaint(uploadId: number, mask: Blob, grow = 8): Promise<Job> {
+  async createInpaint(uploadId: number, mask: Blob, grow = 8, parentJobId?: number): Promise<Job> {
     const form = new FormData()
     form.append('upload_id', String(uploadId))
     form.append('grow', String(grow))
     form.append('mask', mask, 'mask.png')
+    if (parentJobId != null) form.append('parent_job_id', String(parentJobId))
     const { data } = await api.post<Job>('/jobs/inpaint', form)
     return data
   },
@@ -33,6 +35,12 @@ export const jobService = {
   async get(id: number): Promise<Job> {
     const { data } = await api.get<Job>(`/jobs/${id}`)
     return data
+  },
+
+  /** Lista de jobs, opcionalmente de un solo upload (para la galería). */
+  async list(uploadId?: number, pageSize = 100) {
+    const { data } = await api.get('/jobs', { params: { upload_id: uploadId, page_size: pageSize } })
+    return data as { items: Job[]; total: number; page: number; page_size: number }
   },
 
   /** Descarga la imagen restaurada como blob (para mostrarla con object URL). */

@@ -13,4 +13,9 @@ export const uploadService = {
     const { data } = await api.get('/uploads', { params: { page, page_size: pageSize } })
     return data as { items: Upload[]; total: number; page: number; page_size: number }
   },
+
+  /** Borra un upload y en cascada todos sus procesados. */
+  async remove(id: number): Promise<void> {
+    await api.delete(`/uploads/${id}`)
+  },
 }

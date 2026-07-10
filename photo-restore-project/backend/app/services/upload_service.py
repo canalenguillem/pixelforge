@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.constants import UploadStatus
+from app.models.job import ProcessingJob
 from app.models.upload import Upload
 from app.services import image_service
 from app.utils import file_handlers, validators
@@ -71,8 +72,20 @@ def list_uploads(
 
 
 def delete_upload(db: Session, user_id: int, upload_id: int) -> None:
-    """Elimina el fichero de disco y el registro en BD."""
+    """Elimina el upload y TODO lo que cuelga de él (jobs + sus ficheros).
+
+    La FK `ON DELETE CASCADE` borra las filas de processing_jobs; aquí borramos
+    además los ficheros de resultado en disco para no dejar huérfanos.
+    """
     upload = get_upload(db, user_id, upload_id)
+
+    jobs = db.scalars(
+        select(ProcessingJob).where(ProcessingJob.upload_id == upload_id)
+    ).all()
+    for job in jobs:
+        if job.processed_image_path:
+            file_handlers.delete_file(job.processed_image_path)
+
     file_handlers.delete_file(upload.storage_path)
-    db.delete(upload)
+    db.delete(upload)  # cascade elimina las filas de jobs
     db.commit()

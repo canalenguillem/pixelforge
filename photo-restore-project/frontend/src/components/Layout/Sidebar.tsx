@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Sparkles, Settings } from 'lucide-react'
+import { LayoutDashboard, Sparkles, Settings, Images } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Restaurar', icon: Sparkles },
+  { to: '/galeria', label: 'Galería', icon: Images },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/settings', label: 'Ajustes', icon: Settings },
 ]

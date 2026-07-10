@@ -34,9 +34,11 @@ export type WorkflowMode = 'epic' | 'flux'
 export interface Job {
   id: number
   upload_id: number
+  parent_job_id: number | null
   status: JobStatus
   job_type: string | null
   workflow_mode: WorkflowMode
+  params: Record<string, number | boolean | string> | null
   error_message: string | null
   processing_time_seconds: number | null
   created_at: string

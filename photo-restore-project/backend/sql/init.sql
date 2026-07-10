@@ -65,9 +65,11 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
     upload_id BIGINT NOT NULL,
+    parent_job_id BIGINT NULL,               -- job del que proviene la imagen de entrada (encadenado)
     status VARCHAR(50) DEFAULT 'queued',     -- queued | processing | completed | failed
     job_type VARCHAR(100),                   -- restoration | enhancement | upscale | inpaint
     workflow_mode VARCHAR(20) NOT NULL DEFAULT 'epic', -- epic | flux (solo restauración)
+    params JSON NULL,                        -- parámetros usados en el job (para la galería)
     processed_image_path VARCHAR(1000),
     error_message TEXT,
     processing_time_seconds INT,
@@ -76,6 +78,7 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
     completed_at TIMESTAMP NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (upload_id) REFERENCES uploads(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_job_id) REFERENCES processing_jobs(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),
     INDEX idx_status (status),
     INDEX idx_created_at (created_at)

@@ -33,10 +33,30 @@ def _resolve_comfyui(user_id: int) -> tuple[str, str | None]:
     return settings.COMFYUI_DEFAULT_URL, (settings.COMFYUI_API_KEY or None)
 
 
+def _resolve_root_upload(
+    db: Session, user_id: int, upload_id: int, parent_job_id: int | None
+) -> int:
+    """Valida el origen y devuelve el upload raíz.
+
+    Si hay parent_job_id, la entrada será el resultado de ese job (encadenado);
+    el upload raíz se hereda del padre para agrupar toda la cadena.
+    """
+    if parent_job_id is not None:
+        parent = db.get(ProcessingJob, parent_job_id)
+        if parent is None or parent.user_id != user_id:
+            raise NotFoundError("Job padre no encontrado")
+        if parent.status != JobStatus.COMPLETED.value or not parent.processed_image_path:
+            raise AppError("El job padre no tiene un resultado disponible", 409)
+        return parent.upload_id
+    upload = upload_service.get_upload(db, user_id, upload_id)  # valida propiedad (404 si no)
+    return upload.id
+
+
 def enqueue_restoration(
     db: Session,
     user_id: int,
     upload_id: int,
+    parent_job_id: int | None = None,
     workflow_mode: str = "epic",
     restoration_strength: float = 0.35,
     codeformer_fidelity: float = 0.5,
@@ -44,14 +64,21 @@ def enqueue_restoration(
     enable_hdr_lora: bool = False,
 ) -> ProcessingJob:
     """Crea el job (queued) y lo encola en Celery. Enruta por `workflow_mode`."""
-    upload = upload_service.get_upload(db, user_id, upload_id)  # valida propiedad (404 si no)
+    root_upload_id = _resolve_root_upload(db, user_id, upload_id, parent_job_id)
+
+    if workflow_mode == "flux":
+        params: dict = {"flux_denoise": flux_denoise, "enable_hdr_lora": enable_hdr_lora}
+    else:
+        params = {"restoration_strength": restoration_strength, "codeformer_fidelity": codeformer_fidelity}
 
     job = ProcessingJob(
         user_id=user_id,
-        upload_id=upload.id,
+        upload_id=root_upload_id,
+        parent_job_id=parent_job_id,
         status=JobStatus.QUEUED.value,
         job_type=JobType.RESTORATION.value,
         workflow_mode=workflow_mode,
+        params=params,
     )
     db.add(job)
     db.commit()
@@ -77,16 +104,19 @@ def enqueue_inpaint(
     upload_id: int,
     mask_bytes: bytes,
     grow: int = 8,
+    parent_job_id: int | None = None,
 ) -> ProcessingJob:
     """Crea un job de inpaint (queued) con su máscara y lo encola en Celery."""
-    upload = upload_service.get_upload(db, user_id, upload_id)  # valida propiedad
+    root_upload_id = _resolve_root_upload(db, user_id, upload_id, parent_job_id)
     mask_path = file_handlers.save_mask(user_id, mask_bytes)
 
     job = ProcessingJob(
         user_id=user_id,
-        upload_id=upload.id,
+        upload_id=root_upload_id,
+        parent_job_id=parent_job_id,
         status=JobStatus.QUEUED.value,
         job_type=JobType.INPAINT.value,
+        params={"grow": grow},
     )
     db.add(job)
     db.commit()
@@ -106,18 +136,28 @@ def get_job(db: Session, user_id: int, job_id: int) -> ProcessingJob:
 
 
 def list_jobs(
-    db: Session, user_id: int, page: int, page_size: int
+    db: Session,
+    user_id: int,
+    page: int,
+    page_size: int,
+    upload_id: int | None = None,
 ) -> tuple[list[ProcessingJob], int]:
-    total = (
-        db.scalar(
-            select(func.count()).select_from(ProcessingJob).where(ProcessingJob.user_id == user_id)
-        )
-        or 0
+    filters = [ProcessingJob.user_id == user_id]
+    if upload_id is not None:
+        filters.append(ProcessingJob.upload_id == upload_id)
+
+    total = db.scalar(select(func.count()).select_from(ProcessingJob).where(*filters)) or 0
+    # Para la galería (filtrada por upload) queremos orden cronológico ascendente
+    # para reconstruir la cadena; el listado global va descendente.
+    order = (
+        (ProcessingJob.created_at.asc(), ProcessingJob.id.asc())
+        if upload_id is not None
+        else (ProcessingJob.created_at.desc(), ProcessingJob.id.desc())
     )
     items = db.scalars(
         select(ProcessingJob)
-        .where(ProcessingJob.user_id == user_id)
-        .order_by(ProcessingJob.created_at.desc(), ProcessingJob.id.desc())
+        .where(*filters)
+        .order_by(*order)
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()

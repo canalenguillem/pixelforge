@@ -32,6 +32,7 @@ def create_job(data: JobCreate, current_user: CurrentUser, db: DbSession) -> Job
         db,
         current_user.id,
         data.upload_id,
+        parent_job_id=data.parent_job_id,
         workflow_mode=data.workflow_mode.value,
         restoration_strength=data.restoration_strength,
         codeformer_fidelity=data.codeformer_fidelity,
@@ -48,10 +49,13 @@ async def create_inpaint_job(
     upload_id: Annotated[int, Form()],
     mask: Annotated[UploadFile, File(description="Máscara PNG (blanco = reparar)")],
     grow: Annotated[int, Form()] = 8,
+    parent_job_id: Annotated[int | None, Form()] = None,
 ) -> JobRead:
     """Encola un job de eliminación de daño: inpainta la zona enmascarada."""
     mask_bytes = await mask.read()
-    job = job_service.enqueue_inpaint(db, current_user.id, upload_id, mask_bytes, grow)
+    job = job_service.enqueue_inpaint(
+        db, current_user.id, upload_id, mask_bytes, grow, parent_job_id=parent_job_id
+    )
     return JobRead.model_validate(job)
 
 
@@ -61,9 +65,10 @@ def list_jobs(
     db: DbSession,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    upload_id: Annotated[int | None, Query()] = None,
 ) -> JobListResponse:
-    """Lista paginada de los jobs del usuario."""
-    items, total = job_service.list_jobs(db, current_user.id, page, page_size)
+    """Lista paginada de los jobs del usuario (opcionalmente de un solo upload)."""
+    items, total = job_service.list_jobs(db, current_user.id, page, page_size, upload_id=upload_id)
     return JobListResponse(
         items=[JobRead.model_validate(i) for i in items],
         total=total,

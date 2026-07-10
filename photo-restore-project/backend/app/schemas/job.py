@@ -16,6 +16,8 @@ class JobCreate(BaseModel):
     """
 
     upload_id: int
+    # Encadenado: si se indica, la entrada es el resultado de ese job (no el original).
+    parent_job_id: int | None = None
     workflow_mode: WorkflowMode = WorkflowMode.EPIC
 
     # --- Epic (SD1.5 + Tile ControlNet + CodeFormer) ---
@@ -49,9 +51,11 @@ class JobRead(BaseModel):
 
     id: int
     upload_id: int
+    parent_job_id: int | None
     status: str
     job_type: str | None
     workflow_mode: str
+    params: dict | None
     error_message: str | None
     processing_time_seconds: int | None
     created_at: datetime

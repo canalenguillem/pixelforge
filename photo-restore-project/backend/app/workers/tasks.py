@@ -8,6 +8,9 @@ import json
 import os
 import time
 from datetime import datetime, timezone
+from io import BytesIO
+
+from PIL import Image
 
 from app.core.config import settings
 from app.core.constants import JobStatus
@@ -22,6 +25,29 @@ from app.workers.celery_app import celery_app
 
 def _publish(job_id: int, payload: dict) -> None:
     get_redis().publish(f"job:{job_id}:progress", json.dumps(payload))
+
+
+def _resolve_input(db, job: ProcessingJob) -> tuple[bytes, str, int, int]:
+    """Devuelve (bytes, nombre, width, height) de la imagen de entrada del job.
+
+    Si el job tiene parent_job_id, la entrada es el resultado de ese job
+    (encadenado); si no, el fichero original del upload.
+    """
+    if job.parent_job_id:
+        parent = db.get(ProcessingJob, job.parent_job_id)
+        if parent is None or not parent.processed_image_path:
+            raise RuntimeError("El job padre no tiene resultado disponible")
+        path = parent.processed_image_path
+        filename = f"job_{parent.id}.png"
+    else:
+        upload = db.get(Upload, job.upload_id)
+        if upload is None:
+            raise RuntimeError("El upload asociado no existe")
+        path = upload.storage_path
+        filename = upload.original_filename
+    content = file_handlers.read_file(path)
+    width, height = Image.open(BytesIO(content)).size
+    return content, filename, width, height
 
 
 # Flux es mucho más lento y su carga en frío puede tardar varios minutos.
@@ -44,9 +70,6 @@ def process_restoration_job(
         job = db.get(ProcessingJob, job_id)
         if job is None:
             return
-        upload = db.get(Upload, job.upload_id)
-        if upload is None:
-            raise RuntimeError("El upload asociado no existe")
 
         server_url = settings.COMFYUI_DEFAULT_URL
         api_key = settings.COMFYUI_API_KEY or None
@@ -55,10 +78,8 @@ def process_restoration_job(
         db.commit()
         _publish(job_id, {"status": "processing", "stage": "uploading", "progress": 0})
 
-        content = file_handlers.read_file(upload.storage_path)
-        uploaded = comfyui_service.upload_image(
-            server_url, upload.original_filename, content, api_key
-        )
+        content, in_filename, in_w, in_h = _resolve_input(db, job)
+        uploaded = comfyui_service.upload_image(server_url, in_filename, content, api_key)
         comfy_name = uploaded["name"]
         if uploaded.get("subfolder"):
             comfy_name = f"{uploaded['subfolder']}/{comfy_name}"
@@ -73,7 +94,7 @@ def process_restoration_job(
             )
             timeout = _FLUX_TIMEOUT
         else:  # epic (default)
-            work_w, work_h = workflows.work_dimensions(upload.width or 1024, upload.height or 1024)
+            work_w, work_h = workflows.work_dimensions(in_w or 1024, in_h or 1024)
             workflow = workflows.build_restoration_workflow(
                 comfy_name, work_w, work_h,
                 denoise=restoration_strength, codeformer_fidelity=codeformer_fidelity,
@@ -128,9 +149,6 @@ def process_inpaint_job(job_id: int, mask_path: str, grow: int = 8) -> None:
         job = db.get(ProcessingJob, job_id)
         if job is None:
             return
-        upload = db.get(Upload, job.upload_id)
-        if upload is None:
-            raise RuntimeError("El upload asociado no existe")
 
         server_url = settings.COMFYUI_DEFAULT_URL
         api_key = settings.COMFYUI_API_KEY or None
@@ -139,11 +157,9 @@ def process_inpaint_job(job_id: int, mask_path: str, grow: int = 8) -> None:
         db.commit()
         _publish(job_id, {"status": "processing", "stage": "uploading", "progress": 0})
 
-        img_bytes = file_handlers.read_file(upload.storage_path)
+        img_bytes, in_filename, _in_w, _in_h = _resolve_input(db, job)
         mask_bytes = file_handlers.read_file(mask_path)
-        up_img = comfyui_service.upload_image(
-            server_url, upload.original_filename, img_bytes, api_key
-        )
+        up_img = comfyui_service.upload_image(server_url, in_filename, img_bytes, api_key)
         up_mask = comfyui_service.upload_image(server_url, "mask.png", mask_bytes, api_key, overwrite=True)
         img_name = up_img["name"]
         mask_name = up_mask["name"]
