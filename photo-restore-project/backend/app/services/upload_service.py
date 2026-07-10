@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.constants import UploadStatus
 from app.models.job import ProcessingJob
 from app.models.upload import Upload
-from app.services import image_service
+from app.services import image_service, pdf_service
 from app.utils import file_handlers, validators
-from app.utils.exceptions import NotFoundError
+from app.utils.exceptions import AppError, NotFoundError
 
 
 def create_upload(
@@ -39,6 +39,23 @@ def create_upload(
     db.commit()
     db.refresh(upload)
     return upload
+
+
+def create_uploads_from_pdf(
+    db: Session, user_id: int, pdf_bytes: bytes, stem: str = "pdf"
+) -> list[Upload]:
+    """Extrae las fotos del PDF y crea un upload por cada una."""
+    photos = pdf_service.extract_photos(pdf_bytes)
+    uploads: list[Upload] = []
+    for i, (data, ext) in enumerate(photos, start=1):
+        try:
+            up = create_upload(db, user_id, f"{stem}_{i}.{ext}", f"image/{ext}", data)
+            uploads.append(up)
+        except AppError:
+            continue  # saltar imágenes que no pasen la validación
+    if not uploads:
+        raise AppError("No se pudo extraer ninguna imagen válida del PDF", 422)
+    return uploads
 
 
 def get_upload(db: Session, user_id: int, upload_id: int) -> Upload:

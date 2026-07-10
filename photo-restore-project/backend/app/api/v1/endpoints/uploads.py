@@ -4,6 +4,7 @@ Todas las rutas requieren autenticación y operan solo sobre los uploads
 propios del usuario.
 """
 
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile, status
@@ -12,8 +13,12 @@ from fastapi.responses import FileResponse
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.upload import UploadListResponse, UploadRead
 from app.services import upload_service
+from app.utils.exceptions import AppError
 
 router = APIRouter()
+
+# Los PDFs (álbumes escaneados) pueden pesar bastante más que una foto suelta.
+_MAX_PDF_BYTES = 200 * 1024 * 1024
 
 
 @router.post("", response_model=UploadRead, status_code=status.HTTP_201_CREATED)
@@ -28,6 +33,29 @@ async def upload_photo(
         db, current_user.id, file.filename, file.content_type, content
     )
     return UploadRead.model_validate(upload)
+
+
+@router.post("/pdf", response_model=UploadListResponse, status_code=status.HTTP_201_CREATED)
+async def upload_pdf(
+    current_user: CurrentUser,
+    db: DbSession,
+    file: Annotated[UploadFile, File(description="PDF con fotos a extraer")],
+) -> UploadListResponse:
+    """Extrae las fotos embebidas de un PDF y crea un upload por cada una."""
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise AppError("El fichero debe ser un PDF", 415)
+    content = await file.read()
+    if len(content) > _MAX_PDF_BYTES:
+        raise AppError(f"El PDF supera el máximo de {_MAX_PDF_BYTES // (1024 * 1024)} MB", 413)
+
+    stem = os.path.splitext(os.path.basename(file.filename or "pdf"))[0] or "pdf"
+    uploads = upload_service.create_uploads_from_pdf(db, current_user.id, content, stem)
+    return UploadListResponse(
+        items=[UploadRead.model_validate(u) for u in uploads],
+        total=len(uploads),
+        page=1,
+        page_size=len(uploads),
+    )
 
 
 @router.get("", response_model=UploadListResponse)

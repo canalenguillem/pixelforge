@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ImageOff, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus } from 'lucide-react'
 import { AuthImage } from '@/components/Common/AuthImage'
 import { ProcessPanel } from '@/components/Editor/ProcessPanel'
 import { api, apiError } from '@/services/api'
@@ -19,14 +19,49 @@ export function GalleryPage() {
 function UploadGrid() {
   const [uploads, setUploads] = useState<Upload[] | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const navigate = useNavigate()
+  const pdfInput = useRef<HTMLInputElement>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    uploadService
+  function load() {
+    return uploadService
       .list(1, 100)
       .then((r) => setUploads(r.items))
       .catch(() => setUploads([]))
+  }
+
+  useEffect(() => {
+    void load()
   }, [])
+
+  async function handlePdf(file: File) {
+    setNotice(null)
+    setBusy('Extrayendo fotos del PDF…')
+    try {
+      const r = await uploadService.uploadPdf(file)
+      await load()
+      setNotice(`${r.total} foto(s) extraída(s) del PDF.`)
+    } catch (err) {
+      setNotice(apiError(err, 'No se pudo procesar el PDF'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handlePhoto(file: File) {
+    setNotice(null)
+    setBusy('Subiendo foto…')
+    try {
+      await uploadService.upload(file)
+      await load()
+    } catch (err) {
+      setNotice(apiError(err, 'No se pudo subir la foto'))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function handleDelete(id: number) {
     if (!window.confirm('¿Borrar esta foto y TODOS sus procesados? No se puede deshacer.')) return
@@ -43,10 +78,33 @@ function UploadGrid() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Galería</h1>
-        <p className="text-muted-foreground">Tus fotos subidas. Clica una para ver y encadenar procesados.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Galería</h1>
+          <p className="text-muted-foreground">Tus fotos subidas. Clica una para ver y encadenar procesados.</p>
+        </div>
+        <div className="flex gap-2">
+          <input ref={photoInput} type="file" accept="image/*" hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handlePhoto(f); e.target.value = '' }} />
+          <input ref={pdfInput} type="file" accept="application/pdf" hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handlePdf(f); e.target.value = '' }} />
+          <button onClick={() => photoInput.current?.click()} disabled={!!busy}
+            className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+            <ImagePlus className="h-4 w-4" /> Subir foto
+          </button>
+          <button onClick={() => pdfInput.current?.click()} disabled={!!busy}
+            className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            <FileUp className="h-4 w-4" /> Subir PDF
+          </button>
+        </div>
       </div>
+
+      {busy && (
+        <p className="flex items-center gap-2 rounded-md bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> {busy}
+        </p>
+      )}
+      {notice && <p className="rounded-md bg-muted/60 px-4 py-3 text-sm">{notice}</p>}
 
       {uploads === null ? (
         <Centered><Loader2 className="h-5 w-5 animate-spin" /> Cargando…</Centered>

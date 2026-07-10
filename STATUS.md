@@ -19,7 +19,8 @@ manchas → comparar antes/después → descargar, con procesamiento asíncrono 
 | Restauración ComfyUI — **Epic** | ✅ | difusión img2img + **Tile ControlNet** + **CodeFormer** (caras) + RealESRGAN x2 (rápido ~12s) |
 | Restauración ComfyUI — **Flux** | ✅ | **Flux Kontext** GGUF (`flux1-kontext-dev-Q6_K`) + ReferenceLatent + FluxGuidance + RealESRGAN. Calidad superior, coloriza; lento (~2min caliente, ~8min frío, ~14GB VRAM) |
 | Inpainting (quitar manchas) | ✅ | **LaMa** (`big-lama`), rellena solo lo enmascarado, resto pixel-idéntico |
-| **Galería + encadenado** | ✅ | grid de originales → detalle con árbol de resultados (params visibles) → seleccionar cualquier imagen y aplicarle otro proceso. Jobs con `parent_job_id` (la entrada puede ser el resultado de otro job) y `params` JSON persistidos. `GET /jobs?upload_id=`. Frontend: `ProcessPanel` reutilizable (HomePage + Galería), `AuthImage` (miniaturas con token) |
+| **Galería + encadenado** | ✅ | grid de originales → detalle con árbol de resultados (params visibles) → seleccionar cualquier imagen y aplicarle otro proceso. Jobs con `parent_job_id` (la entrada puede ser el resultado de otro job) y `params` JSON persistidos. `GET /jobs?upload_id=`. Frontend: `ProcessPanel` reutilizable (HomePage + Galería), `AuthImage` (miniaturas con token). Borrar upload = cascada (jobs FK + ficheros en disco). |
+| **Importar PDF** | ✅ | `POST /uploads/pdf`: extrae las imágenes embebidas (PyMuPDF), 1 upload por foto (dedup por xref, ignora <200px, normaliza colorspaces). Botón "Subir PDF"/"Subir foto" en la galería. |
 | Async (Celery + WebSocket) | ✅ | `POST /jobs` responde 202; progreso real del sampler vía WS de ComfyUI → Redis pub/sub → WS al cliente |
 | Frontend completo | ✅ | login/registro, drag&drop, sliders, **editor de máscara con pincel**, visor antes/después, barra de progreso |
 

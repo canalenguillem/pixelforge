@@ -14,6 +14,14 @@ export const uploadService = {
     return data as { items: Upload[]; total: number; page: number; page_size: number }
   },
 
+  /** Sube un PDF y crea un upload por cada foto extraída. */
+  async uploadPdf(file: File) {
+    const form = new FormData()
+    form.append('file', file)
+    const { data } = await api.post('/uploads/pdf', form, { timeout: 300_000 })
+    return data as { items: Upload[]; total: number }
+  },
+
   /** Borra un upload y en cascada todos sus procesados. */
   async remove(id: number): Promise<void> {
     await api.delete(`/uploads/${id}`)

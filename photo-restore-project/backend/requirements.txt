@@ -38,6 +38,7 @@ cryptography==44.0.0
 # --- Image processing --------------------------------------------------------
 pillow==11.1.0
 opencv-python-headless==4.10.0.84
+pymupdf==1.24.10               # extracción de imágenes embebidas en PDFs
 
 # --- HTTP / LLM integrations -------------------------------------------------
 httpx==0.28.1
