@@ -24,6 +24,7 @@ class JobType(str, Enum):
     RESTORATION = "restoration"
     ENHANCEMENT = "enhancement"
     UPSCALE = "upscale"
+    INPAINT = "inpaint"
 
 
 class LLMProvider(str, Enum):

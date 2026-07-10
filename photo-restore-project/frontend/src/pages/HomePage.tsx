@@ -1,16 +1,19 @@
-import { useState } from 'react'
-import { Loader2, RotateCcw, Download, Sparkles } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Loader2, RotateCcw, Download, Sparkles, Eraser, Brush, Trash2 } from 'lucide-react'
 import { UploadZone } from '@/components/Upload/UploadZone'
 import { BeforeAfterSlider } from '@/components/Editor/BeforeAfterSlider'
+import { MaskEditor, type MaskEditorHandle } from '@/components/Editor/MaskEditor'
 import { uploadService } from '@/services/upload.service'
 import { jobService, waitForJob } from '@/services/job.service'
 import { apiError } from '@/services/api'
 import type { Upload } from '@/types'
 
 type Phase = 'idle' | 'uploading' | 'ready' | 'processing' | 'done'
+type Mode = 'restore' | 'inpaint'
 
 export function HomePage() {
   const [phase, setPhase] = useState<Phase>('idle')
+  const [mode, setMode] = useState<Mode>('restore')
   const [error, setError] = useState<string | null>(null)
 
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null)
@@ -20,7 +23,11 @@ export function HomePage() {
 
   const [strength, setStrength] = useState(0.35)
   const [fidelity, setFidelity] = useState(0.5)
+  const [brushSize, setBrushSize] = useState(24)
   const [progress, setProgress] = useState(0)
+
+  const maskRef = useRef<MaskEditorHandle>(null)
+  const processing = phase === 'processing'
 
   async function handleFile(file: File) {
     setError(null)
@@ -37,18 +44,12 @@ export function HomePage() {
     }
   }
 
-  async function handleRestore() {
-    if (!upload) return
+  async function runJob(create: () => Promise<{ id: number }>, failMsg: string) {
     setError(null)
     setProgress(0)
     setPhase('processing')
     try {
-      const job = await jobService.create({
-        upload_id: upload.id,
-        restoration_strength: strength,
-        codeformer_fidelity: fidelity,
-      })
-      // Espera async con progreso en vivo (WebSocket, con fallback a polling).
+      const job = await create()
       await waitForJob(job.id, setProgress)
       const final = await jobService.get(job.id)
       const blob = await jobService.result(job.id)
@@ -56,9 +57,27 @@ export function HomePage() {
       setElapsed(final.processing_time_seconds)
       setPhase('done')
     } catch (err) {
-      setError(apiError(err, 'La restauración falló'))
+      setError(apiError(err, failMsg))
       setPhase('ready')
     }
+  }
+
+  function handleRestore() {
+    if (!upload) return
+    void runJob(
+      () => jobService.create({ upload_id: upload.id, restoration_strength: strength, codeformer_fidelity: fidelity }),
+      'La restauración falló',
+    )
+  }
+
+  async function handleInpaint() {
+    if (!upload) return
+    const mask = await maskRef.current?.exportMask()
+    if (!mask) {
+      setError('No se pudo generar la máscara')
+      return
+    }
+    void runJob(() => jobService.createInpaint(upload.id, mask), 'La eliminación de manchas falló')
   }
 
   function reset() {
@@ -75,7 +94,7 @@ export function HomePage() {
       <div>
         <h1 className="text-2xl font-bold">Restaurar foto</h1>
         <p className="text-muted-foreground">
-          Sube una foto antigua y recupérala: reenfoque, limpieza y restauración de rostros.
+          Recupera fotos antiguas: reenfoque y rostros, o elimina manchas pintándolas.
         </p>
       </div>
 
@@ -91,61 +110,84 @@ export function HomePage() {
         </div>
       )}
 
-      {(phase === 'ready' || phase === 'processing') && beforeUrl && (
+      {(phase === 'ready' || processing) && beforeUrl && (
         <div className="space-y-5">
-          <img
-            src={beforeUrl}
-            alt="Original"
-            className="max-h-[50vh] w-full rounded-xl border border-border object-contain"
-          />
+          {/* Selector de modo */}
+          <div className="flex gap-2 rounded-lg bg-muted p-1">
+            <ModeTab active={mode === 'restore'} disabled={processing} onClick={() => setMode('restore')} icon={Sparkles} label="Restaurar" />
+            <ModeTab active={mode === 'inpaint'} disabled={processing} onClick={() => setMode('inpaint')} icon={Eraser} label="Quitar manchas" />
+          </div>
+
+          {mode === 'restore' ? (
+            <img
+              src={beforeUrl}
+              alt="Original"
+              className="max-h-[50vh] w-full rounded-xl border border-border object-contain"
+            />
+          ) : (
+            <MaskEditor ref={maskRef} imageUrl={beforeUrl} brushSize={brushSize} />
+          )}
 
           <div className="space-y-4 rounded-xl border border-border p-5">
-            <Slider
-              label="Fuerza de restauración"
-              hint={strength < 0.32 ? 'fiel' : strength > 0.42 ? 'agresiva' : 'equilibrada'}
-              min={0.2}
-              max={0.5}
-              step={0.05}
-              value={strength}
-              onChange={setStrength}
-              disabled={phase === 'processing'}
-            />
-            <Slider
-              label="Fidelidad de rostros"
-              hint={fidelity <= 0.5 ? 'más calidad' : 'más fiel'}
-              min={0}
-              max={1}
-              step={0.1}
-              value={fidelity}
-              onChange={setFidelity}
-              disabled={phase === 'processing'}
-            />
+            {mode === 'restore' ? (
+              <>
+                <Slider
+                  label="Fuerza de restauración"
+                  hint={strength < 0.32 ? 'fiel' : strength > 0.42 ? 'agresiva' : 'equilibrada'}
+                  min={0.2} max={0.5} step={0.05} value={strength} onChange={setStrength} disabled={processing}
+                  format={(v) => v.toFixed(2)}
+                />
+                <Slider
+                  label="Fidelidad de rostros"
+                  hint={fidelity <= 0.5 ? 'más calidad' : 'más fiel'}
+                  min={0} max={1} step={0.1} value={fidelity} onChange={setFidelity} disabled={processing}
+                  format={(v) => v.toFixed(2)}
+                />
+              </>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Slider
+                    label="Tamaño del pincel"
+                    hint="pinta sobre el daño"
+                    min={6} max={80} step={2} value={brushSize} onChange={setBrushSize} disabled={processing}
+                    format={(v) => `${v}px`}
+                  />
+                </div>
+                <button
+                  onClick={() => maskRef.current?.clear()}
+                  disabled={processing}
+                  className="mt-5 flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" /> Limpiar
+                </button>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button
-                onClick={handleRestore}
-                disabled={phase === 'processing'}
+                onClick={mode === 'restore' ? handleRestore : handleInpaint}
+                disabled={processing}
                 className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                {phase === 'processing' ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Restaurando…
-                  </>
+                {processing ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Procesando…</>
+                ) : mode === 'restore' ? (
+                  <><Sparkles className="h-4 w-4" /> Restaurar</>
                 ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" /> Restaurar
-                  </>
+                  <><Brush className="h-4 w-4" /> Quitar manchas</>
                 )}
               </button>
               <button
                 onClick={reset}
-                disabled={phase === 'processing'}
+                disabled={processing}
                 className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm hover:bg-muted disabled:opacity-50"
               >
                 <RotateCcw className="h-4 w-4" /> Otra
               </button>
             </div>
-            {phase === 'processing' && (
+
+            {processing && (
               <div className="space-y-1.5">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
@@ -154,9 +196,7 @@ export function HomePage() {
                   />
                 </div>
                 <p className="text-center text-xs text-muted-foreground">
-                  {progress > 0
-                    ? `Procesando en ComfyUI… ${Math.round(progress * 100)}%`
-                    : 'En cola / cargando modelos…'}
+                  {progress > 0 ? `Procesando en ComfyUI… ${Math.round(progress * 100)}%` : 'En cola / cargando modelos…'}
                 </p>
               </div>
             )}
@@ -168,13 +208,11 @@ export function HomePage() {
         <div className="space-y-4">
           <BeforeAfterSlider beforeSrc={beforeUrl} afterSrc={afterUrl} />
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {elapsed != null && `Restaurada en ${elapsed}s`}
-            </p>
+            <p className="text-sm text-muted-foreground">{elapsed != null && `Procesada en ${elapsed}s`}</p>
             <div className="flex gap-3">
               <a
                 href={afterUrl}
-                download="restaurada.png"
+                download="resultado.png"
                 className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
               >
                 <Download className="h-4 w-4" /> Descargar
@@ -193,6 +231,28 @@ export function HomePage() {
   )
 }
 
+function ModeTab({
+  active, disabled, onClick, icon: Icon, label,
+}: {
+  active: boolean
+  disabled?: boolean
+  onClick: () => void
+  icon: typeof Sparkles
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+        active ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </button>
+  )
+}
+
 interface SliderProps {
   label: string
   hint: string
@@ -202,15 +262,16 @@ interface SliderProps {
   value: number
   onChange: (v: number) => void
   disabled?: boolean
+  format: (v: number) => string
 }
 
-function Slider({ label, hint, min, max, step, value, onChange, disabled }: SliderProps) {
+function Slider({ label, hint, min, max, step, value, onChange, disabled, format }: SliderProps) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-sm">
         <span className="font-medium">{label}</span>
         <span className="text-muted-foreground">
-          {value.toFixed(2)} · {hint}
+          {format(value)} · {hint}
         </span>
       </div>
       <input

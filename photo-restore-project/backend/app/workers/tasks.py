@@ -100,3 +100,79 @@ def process_restoration_job(
         _publish(job_id, {"status": "failed", "error": str(exc)[:500]})
     finally:
         db.close()
+
+
+@celery_app.task(name="process_inpaint_job")
+def process_inpaint_job(job_id: int, mask_path: str, grow: int = 8) -> None:
+    """Elimina daño (manchas/arañazos) con LaMa sobre la zona enmascarada."""
+    db = SessionLocal()
+    started = time.monotonic()
+    try:
+        job = db.get(ProcessingJob, job_id)
+        if job is None:
+            return
+        upload = db.get(Upload, job.upload_id)
+        if upload is None:
+            raise RuntimeError("El upload asociado no existe")
+
+        server_url = settings.COMFYUI_DEFAULT_URL
+        api_key = settings.COMFYUI_API_KEY or None
+
+        job.status = JobStatus.PROCESSING.value
+        db.commit()
+        _publish(job_id, {"status": "processing", "stage": "uploading", "progress": 0})
+
+        img_bytes = file_handlers.read_file(upload.storage_path)
+        mask_bytes = file_handlers.read_file(mask_path)
+        up_img = comfyui_service.upload_image(
+            server_url, upload.original_filename, img_bytes, api_key
+        )
+        up_mask = comfyui_service.upload_image(server_url, "mask.png", mask_bytes, api_key, overwrite=True)
+        img_name = up_img["name"]
+        mask_name = up_mask["name"]
+        if up_img.get("subfolder"):
+            img_name = f"{up_img['subfolder']}/{img_name}"
+        if up_mask.get("subfolder"):
+            mask_name = f"{up_mask['subfolder']}/{mask_name}"
+
+        _publish(job_id, {"status": "processing", "stage": "inpainting", "progress": 0})
+        workflow = workflows.build_inpaint_workflow(img_name, mask_name, grow=grow)
+
+        def on_progress(value: int, maximum: int, _node: str | None) -> None:
+            pct = round(value / maximum, 3) if maximum else 0
+            _publish(job_id, {"status": "processing", "stage": "inpainting", "progress": pct})
+
+        images = comfyui_service.run_with_progress(server_url, workflow, api_key, on_progress)
+        if not images:
+            raise RuntimeError("ComfyUI no devolvió ninguna imagen")
+
+        _publish(job_id, {"status": "processing", "stage": "downloading", "progress": 1})
+        first = images[0]
+        result = comfyui_service.download_image(
+            server_url, first["filename"], first.get("subfolder", ""), "output", api_key
+        )
+        ext = os.path.splitext(first["filename"])[1].lstrip(".") or "png"
+        processed_path = file_handlers.save_processed(job.user_id, ext, result)
+
+        job.processed_image_path = processed_path
+        job.status = JobStatus.COMPLETED.value
+        job.processing_time_seconds = int(time.monotonic() - started)
+        job.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        _publish(job_id, {"status": "completed", "job_id": job_id})
+
+        file_handlers.delete_file(mask_path)  # limpiar máscara temporal
+
+    except Exception as exc:  # noqa: BLE001
+        try:
+            job = db.get(ProcessingJob, job_id)
+            if job is not None:
+                job.status = JobStatus.FAILED.value
+                job.error_message = str(exc)[:2000]
+                job.processing_time_seconds = int(time.monotonic() - started)
+                db.commit()
+        except Exception:
+            pass
+        _publish(job_id, {"status": "failed", "error": str(exc)[:500]})
+    finally:
+        db.close()

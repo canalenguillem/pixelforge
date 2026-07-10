@@ -22,8 +22,10 @@ UPSCALE_MODEL = "RealESRGAN_x2.pth"
 FACERESTORE_MODEL = "codeformer.pth"
 TILE_CONTROLNET = "SD1.5\\control_v11f1e_sd15_tile_fp16.safetensors"
 FACE_DETECTION = "retinaface_resnet50"
+INPAINT_MODEL = "big-lama.pt"
 
 OUTPUT_PREFIX = "photorestore/restored"
+INPAINT_PREFIX = "photorestore/inpaint"
 
 DEFAULT_POSITIVE = (
     "restored vintage black and white photograph, monochrome, sharp focus, "
@@ -129,5 +131,55 @@ def build_restoration_workflow(
         "save": {
             "class_type": "SaveImage",
             "inputs": {"images": ["fr", 0], "filename_prefix": OUTPUT_PREFIX},
+        },
+    }
+
+
+def build_inpaint_workflow(image_name: str, mask_name: str, grow: int = 8) -> dict[str, Any]:
+    """Workflow de eliminación de daño (manchas/arañazos) con LaMa.
+
+    Rellena SOLO la zona enmascarada (blanco) por textura circundante y compone
+    sobre el original, de modo que el resto queda pixel a pixel intacto.
+
+    - image_name / mask_name: ficheros ya subidos a ComfyUI (input/).
+    - grow: píxeles de expansión de la máscara (cubre bordes de la mancha).
+    """
+    return {
+        "load": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+        "mask": {
+            "class_type": "LoadImageMask",
+            "inputs": {"image": mask_name, "channel": "red"},
+        },
+        "grow": {
+            "class_type": "GrowMask",
+            "inputs": {"mask": ["mask", 0], "expand": grow, "tapered_corners": True},
+        },
+        "model": {
+            "class_type": "INPAINT_LoadInpaintModel",
+            "inputs": {"model_name": INPAINT_MODEL},
+        },
+        "inpaint": {
+            "class_type": "INPAINT_InpaintWithModel",
+            "inputs": {
+                "inpaint_model": ["model", 0],
+                "image": ["load", 0],
+                "mask": ["grow", 0],
+                "seed": 0,
+            },
+        },
+        "composite": {
+            "class_type": "ImageCompositeMasked",
+            "inputs": {
+                "destination": ["load", 0],
+                "source": ["inpaint", 0],
+                "mask": ["grow", 0],
+                "x": 0,
+                "y": 0,
+                "resize_source": False,
+            },
+        },
+        "save": {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["composite", 0], "filename_prefix": INPAINT_PREFIX},
         },
     }

@@ -60,6 +60,33 @@ def enqueue_restoration(
     return job
 
 
+def enqueue_inpaint(
+    db: Session,
+    user_id: int,
+    upload_id: int,
+    mask_bytes: bytes,
+    grow: int = 8,
+) -> ProcessingJob:
+    """Crea un job de inpaint (queued) con su máscara y lo encola en Celery."""
+    upload = upload_service.get_upload(db, user_id, upload_id)  # valida propiedad
+    mask_path = file_handlers.save_mask(user_id, mask_bytes)
+
+    job = ProcessingJob(
+        user_id=user_id,
+        upload_id=upload.id,
+        status=JobStatus.QUEUED.value,
+        job_type=JobType.INPAINT.value,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    from app.workers.tasks import process_inpaint_job
+
+    process_inpaint_job.delay(job.id, mask_path, grow)
+    return job
+
+
 def get_job(db: Session, user_id: int, job_id: int) -> ProcessingJob:
     job = db.get(ProcessingJob, job_id)
     if job is None or job.user_id != user_id:

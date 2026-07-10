@@ -9,7 +9,7 @@ import os
 from typing import Annotated
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse
 from jose import JWTError
 
@@ -35,6 +35,20 @@ def create_job(data: JobCreate, current_user: CurrentUser, db: DbSession) -> Job
         restoration_strength=data.restoration_strength,
         codeformer_fidelity=data.codeformer_fidelity,
     )
+    return JobRead.model_validate(job)
+
+
+@router.post("/inpaint", response_model=JobRead, status_code=status.HTTP_202_ACCEPTED)
+async def create_inpaint_job(
+    current_user: CurrentUser,
+    db: DbSession,
+    upload_id: Annotated[int, Form()],
+    mask: Annotated[UploadFile, File(description="Máscara PNG (blanco = reparar)")],
+    grow: Annotated[int, Form()] = 8,
+) -> JobRead:
+    """Encola un job de eliminación de daño: inpainta la zona enmascarada."""
+    mask_bytes = await mask.read()
+    job = job_service.enqueue_inpaint(db, current_user.id, upload_id, mask_bytes, grow)
     return JobRead.model_validate(job)
 
 

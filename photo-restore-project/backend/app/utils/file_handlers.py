@@ -34,6 +34,16 @@ def save_processed(user_id: int, extension: str, content: bytes) -> str:
     return path
 
 
+def save_mask(user_id: int, content: bytes) -> str:
+    """Guarda una máscara de inpaint (PNG) y devuelve su ruta."""
+    directory = os.path.join(settings.UPLOAD_FOLDER, f"user_{user_id}", "masks")
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"{uuid.uuid4().hex}.png")
+    with open(path, "wb") as fh:
+        fh.write(content)
+    return path
+
+
 def read_file(path: str) -> bytes:
     """Lee el contenido binario de un fichero."""
     with open(path, "rb") as fh:

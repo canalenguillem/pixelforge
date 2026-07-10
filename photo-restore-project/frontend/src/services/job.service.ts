@@ -9,9 +9,19 @@ export interface CreateJobPayload {
 }
 
 export const jobService = {
-  /** Encola un job (async). Devuelve el job en estado 'queued'. */
+  /** Encola un job de restauración (async). Devuelve el job en estado 'queued'. */
   async create(payload: CreateJobPayload): Promise<Job> {
     const { data } = await api.post<Job>('/jobs', payload)
+    return data
+  },
+
+  /** Encola un job de inpaint (eliminar daño) con máscara. */
+  async createInpaint(uploadId: number, mask: Blob, grow = 8): Promise<Job> {
+    const form = new FormData()
+    form.append('upload_id', String(uploadId))
+    form.append('grow', String(grow))
+    form.append('mask', mask, 'mask.png')
+    const { data } = await api.post<Job>('/jobs/inpaint', form)
     return data
   },
 
