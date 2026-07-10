@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus, RotateCcw, RotateCw } from 'lucide-react'
+import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus, RotateCcw, RotateCw, Columns2, Wand2 } from 'lucide-react'
 import { AuthImage } from '@/components/Common/AuthImage'
 import { ProcessPanel } from '@/components/Editor/ProcessPanel'
+import { BeforeAfterSlider } from '@/components/Editor/BeforeAfterSlider'
 import { api, apiError } from '@/services/api'
 import { uploadService } from '@/services/upload.service'
 import { jobService } from '@/services/job.service'
@@ -192,6 +193,8 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<SourceSel>({ apiPath: `/uploads/${uploadId}/download`, label: 'Original' })
   const [selUrl, setSelUrl] = useState<string | null>(null)
+  const [origUrl, setOrigUrl] = useState<string | null>(null)
+  const [view, setView] = useState<'compare' | 'edit'>('edit')
   const navigate = useNavigate()
 
   async function handleDeleteUpload() {
@@ -220,6 +223,11 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   useEffect(() => {
     void refresh()
     selectSource({ apiPath: `/uploads/${uploadId}/download`, label: 'Original' })
+    // el original como object URL para el comparador
+    api
+      .get(`/uploads/${uploadId}/download`, { responseType: 'blob' })
+      .then((r) => setOrigUrl(URL.createObjectURL(r.data as Blob)))
+      .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadId])
 
@@ -227,6 +235,8 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   function selectSource(s: SourceSel) {
     setSel(s)
     setSelUrl(null)
+    // Al elegir un resultado, mostramos la comparación; en el original, el editor.
+    setView(s.parentJobId ? 'compare' : 'edit')
     api
       .get(s.apiPath, { responseType: 'blob' })
       .then((r) => setSelUrl(URL.createObjectURL(r.data as Blob)))
@@ -276,12 +286,27 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
         </div>
       </div>
 
-      {/* Panel de proceso sobre la imagen seleccionada */}
+      {/* Toggle: comparar con el original / aplicar un proceso */}
       <div>
-        <p className="mb-2 text-sm">
-          Aplicar a: <span className="font-medium">{sel.label}</span>
-        </p>
-        {selUrl ? (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex gap-2 rounded-lg bg-muted p-1">
+            <SegTab active={view === 'compare'} onClick={() => setView('compare')} icon={Columns2} label="Comparar" />
+            <SegTab active={view === 'edit'} onClick={() => setView('edit')} icon={Wand2} label="Aplicar proceso" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {view === 'compare' ? 'Original vs' : 'Aplicar a:'} <span className="font-medium text-foreground">{sel.label}</span>
+          </p>
+        </div>
+
+        {view === 'compare' ? (
+          !sel.parentJobId ? (
+            <Centered>Selecciona un resultado de la tira para compararlo con el original.</Centered>
+          ) : origUrl && selUrl ? (
+            <BeforeAfterSlider beforeSrc={origUrl} afterSrc={selUrl} />
+          ) : (
+            <Centered><Loader2 className="h-5 w-5 animate-spin" /> Cargando imágenes…</Centered>
+          )
+        ) : selUrl ? (
           <ProcessPanel
             key={sel.apiPath}
             source={{ uploadId, parentJobId: sel.parentJobId, imageUrl: selUrl }}
@@ -310,6 +335,21 @@ function Thumb({ active, onClick, src, label, sublabel }: {
         <div className="truncate font-medium">{label}</div>
         {sublabel && <div className="truncate text-muted-foreground">{sublabel}</div>}
       </div>
+    </button>
+  )
+}
+
+function SegTab({ active, onClick, icon: Icon, label }: {
+  active: boolean; onClick: () => void; icon: typeof Columns2; label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+        active ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <Icon className="h-4 w-4" /> {label}
     </button>
   )
 }
