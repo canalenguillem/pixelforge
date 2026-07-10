@@ -17,7 +17,7 @@ manchas → comparar antes/después → descargar, con procesamiento asíncrono 
 | Auth JWT | ✅ | register, login, refresh, logout (revocación en Redis), `/me` |
 | Uploads | ✅ | multipart, validación (ext+tamaño+imagen real con Pillow), storage, aislamiento por usuario |
 | Restauración ComfyUI — **Epic** | ✅ | difusión img2img + **Tile ControlNet** + **CodeFormer** (caras) + RealESRGAN x2 (rápido ~12s) |
-| Restauración ComfyUI — **Flux** | ✅ | **Flux Kontext** GGUF (`flux1-kontext-dev-Q6_K`) + ReferenceLatent + FluxGuidance + RealESRGAN, **30 steps**. Prompts curados (del workflow comprado) muy explícitos en preservar identidad. **Toggle Colorizar** (B&N vs color). **HDR LoRA** opcional: se activa sola si `F.1_realistic_HDR_v1.safetensors` está en `models/loras` (el worker lo detecta con `list_loras`; si no, la ignora). Calidad superior; lento (~2-3min, ~14GB VRAM) |
+| Restauración ComfyUI — **Flux** | ✅ | **Flux Kontext** GGUF (`flux1-kontext-dev-Q6_K`) + ReferenceLatent + FluxGuidance + RealESRGAN, **30 steps**. Prompts curados (del workflow comprado) muy explícitos en preservar identidad. **Toggle Colorizar** (B&N vs color). **HDR LoRA** (`F.1_realistic_HDR_v1`, **ya instalada**): se activa sola vía `list_loras` cuando `enable_hdr_lora` (default on). Calidad superior; lento (~2-3min, ~14GB VRAM) |
 | Inpainting (quitar manchas) | ✅ | **LaMa** (`big-lama`), rellena solo lo enmascarado, resto pixel-idéntico |
 | **Galería + encadenado** | ✅ | grid de originales → detalle con árbol de resultados (params visibles) → seleccionar cualquier imagen y aplicarle otro proceso. Jobs con `parent_job_id` (la entrada puede ser el resultado de otro job) y `params` JSON persistidos. `GET /jobs?upload_id=`. Frontend: `ProcessPanel` reutilizable (HomePage + Galería), `AuthImage` (miniaturas con token). Borrar upload = cascada (jobs FK + ficheros en disco). |
 | **Importar PDF** | ✅ | `POST /uploads/pdf`: extrae las imágenes embebidas (PyMuPDF), 1 upload por foto (dedup por xref, ignora <200px, normaliza colorspaces). Botón "Subir PDF"/"Subir foto" en la galería. |
@@ -83,7 +83,8 @@ Navegador ──5273──> Frontend (Vite dev) ──/api proxy──> Backend 
 | `big-lama.pt` | `models\inpaint\` | Inpainting (quitar manchas) |
 | Checkpoints: `epicrealism.safetensors` (usado), absolutereality, v1-5-pruned | `models\checkpoints\` | img2img de restauración (Epic) |
 | `RealESRGAN_x2.pth` | `models\upscale_models\` | Upscale x2 |
-| `flux1-kontext-dev-Q6_K.gguf` + `clip_l`/`t5xxl_fp8` + `ae.safetensors` | `models\{unet_gguf,clip,vae}\` | **Flux Kontext** (modo flux). Nodo `ComfyUI-GGUF` ya instalado. HDR LoRA NO instalada (opción no-op) |
+| `flux1-kontext-dev-Q6_K.gguf` + `clip_l`/`t5xxl_fp8` + `ae.safetensors` | `models\{unet_gguf,clip,vae}\` | **Flux Kontext** (modo flux). Nodo `ComfyUI-GGUF` ya instalado. |
+| `F.1_realistic_HDR_v1.safetensors` (~94 MB, F16) | `models\loras\` | **HDR LoRA** del workflow comprado (ya instalada). El worker la usa si `enable_hdr_lora` y `list_loras` la encuentra. |
 
 Custom node añadido: **`facerestore_cf`** (en `custom_nodes\`, deps instaladas en su venv). El pack `comfyui-inpaint-nodes` ya estaba.
 
