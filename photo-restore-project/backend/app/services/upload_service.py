@@ -88,6 +88,20 @@ def list_uploads(
     return list(items), total
 
 
+def rotate_upload(db: Session, user_id: int, upload_id: int, clockwise: bool) -> Upload:
+    """Rota el fichero del upload 90° in-place y actualiza sus dimensiones."""
+    upload = get_upload(db, user_id, upload_id)
+    content = file_handlers.read_file(upload.storage_path)
+    rotated, width, height = image_service.rotate_image(content, clockwise)
+    with open(upload.storage_path, "wb") as fh:
+        fh.write(rotated)
+    upload.width = width
+    upload.height = height
+    db.commit()
+    db.refresh(upload)
+    return upload
+
+
 def delete_upload(db: Session, user_id: int, upload_id: int) -> None:
     """Elimina el upload y TODO lo que cuelga de él (jobs + sus ficheros).
 

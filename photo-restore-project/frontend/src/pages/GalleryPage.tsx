@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus } from 'lucide-react'
+import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus, RotateCcw, RotateCw } from 'lucide-react'
 import { AuthImage } from '@/components/Common/AuthImage'
 import { ProcessPanel } from '@/components/Editor/ProcessPanel'
 import { api, apiError } from '@/services/api'
@@ -19,11 +19,25 @@ export function GalleryPage() {
 function UploadGrid() {
   const [uploads, setUploads] = useState<Upload[] | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [rotating, setRotating] = useState<number | null>(null)
+  const [versions, setVersions] = useState<Record<number, number>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const navigate = useNavigate()
   const pdfInput = useRef<HTMLInputElement>(null)
   const photoInput = useRef<HTMLInputElement>(null)
+
+  async function handleRotate(id: number, direction: 'left' | 'right') {
+    setRotating(id)
+    try {
+      await uploadService.rotate(id, direction)
+      setVersions((v) => ({ ...v, [id]: (v[id] ?? 0) + 1 })) // fuerza recarga de la miniatura
+    } catch {
+      /* noop */
+    } finally {
+      setRotating(null)
+    }
+  }
 
   function load() {
     return uploadService
@@ -121,9 +135,33 @@ function UploadGrid() {
               className="group relative overflow-hidden rounded-xl border border-border transition-colors hover:border-primary"
             >
               <button onClick={() => navigate(`/galeria/${u.id}`)} className="block w-full text-left">
-                <AuthImage src={`/uploads/${u.id}/download`} className="aspect-square w-full bg-muted object-cover" />
+                <AuthImage
+                  src={`/uploads/${u.id}/download${versions[u.id] ? `?r=${versions[u.id]}` : ''}`}
+                  className="aspect-square w-full bg-muted object-cover"
+                />
                 <div className="truncate px-3 py-2 text-xs text-muted-foreground">{u.original_filename}</div>
               </button>
+
+              {/* Girar (izquierda / derecha) */}
+              <div className="absolute left-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  onClick={() => handleRotate(u.id, 'left')}
+                  disabled={rotating === u.id}
+                  title="Girar a la izquierda"
+                  className="rounded-md bg-black/60 p-1.5 text-white hover:bg-black/80 disabled:opacity-60"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleRotate(u.id, 'right')}
+                  disabled={rotating === u.id}
+                  title="Girar a la derecha"
+                  className="rounded-md bg-black/60 p-1.5 text-white hover:bg-black/80 disabled:opacity-60"
+                >
+                  {rotating === u.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
+                </button>
+              </div>
+
               <button
                 onClick={() => handleDelete(u.id)}
                 disabled={deleting === u.id}

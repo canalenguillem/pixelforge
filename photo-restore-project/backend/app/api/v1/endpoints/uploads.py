@@ -81,6 +81,18 @@ def get_upload(upload_id: int, current_user: CurrentUser, db: DbSession) -> Uplo
     return UploadRead.model_validate(upload_service.get_upload(db, current_user.id, upload_id))
 
 
+@router.post("/{upload_id}/rotate", response_model=UploadRead)
+def rotate_upload(
+    upload_id: int,
+    current_user: CurrentUser,
+    db: DbSession,
+    direction: Annotated[str, Query(pattern="^(left|right)$")] = "right",
+) -> UploadRead:
+    """Rota el original 90° a izquierda o derecha (in-place)."""
+    upload = upload_service.rotate_upload(db, current_user.id, upload_id, clockwise=direction == "right")
+    return UploadRead.model_validate(upload)
+
+
 @router.delete("/{upload_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_upload(upload_id: int, current_user: CurrentUser, db: DbSession) -> None:
     """Elimina un upload propio (fichero + registro)."""

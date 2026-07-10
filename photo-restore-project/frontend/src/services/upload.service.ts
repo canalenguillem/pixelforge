@@ -22,6 +22,12 @@ export const uploadService = {
     return data as { items: Upload[]; total: number }
   },
 
+  /** Rota el original 90° a izquierda o derecha (in-place). */
+  async rotate(id: number, direction: 'left' | 'right'): Promise<Upload> {
+    const { data } = await api.post(`/uploads/${id}/rotate`, null, { params: { direction } })
+    return data as Upload
+  },
+
   /** Borra un upload y en cascada todos sus procesados. */
   async remove(id: number): Promise<void> {
     await api.delete(`/uploads/${id}`)

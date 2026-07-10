@@ -21,6 +21,7 @@ manchas → comparar antes/después → descargar, con procesamiento asíncrono 
 | Inpainting (quitar manchas) | ✅ | **LaMa** (`big-lama`), rellena solo lo enmascarado, resto pixel-idéntico |
 | **Galería + encadenado** | ✅ | grid de originales → detalle con árbol de resultados (params visibles) → seleccionar cualquier imagen y aplicarle otro proceso. Jobs con `parent_job_id` (la entrada puede ser el resultado de otro job) y `params` JSON persistidos. `GET /jobs?upload_id=`. Frontend: `ProcessPanel` reutilizable (HomePage + Galería), `AuthImage` (miniaturas con token). Borrar upload = cascada (jobs FK + ficheros en disco). |
 | **Importar PDF** | ✅ | `POST /uploads/pdf`: extrae las imágenes embebidas (PyMuPDF), 1 upload por foto (dedup por xref, ignora <200px, normaliza colorspaces). Botón "Subir PDF"/"Subir foto" en la galería. |
+| **Rotar 90°** | ✅ | `POST /uploads/{id}/rotate?direction=left\|right`: rota el original in-place (Pillow, actualiza dims). Botones ↺/↻ en las tarjetas de la galería (miniatura refrescada con cache-busting). |
 | Async (Celery + WebSocket) | ✅ | `POST /jobs` responde 202; progreso real del sampler vía WS de ComfyUI → Redis pub/sub → WS al cliente |
 | Frontend completo | ✅ | login/registro, drag&drop, sliders, **editor de máscara con pincel**, visor antes/después, barra de progreso |
 
