@@ -235,8 +235,7 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   function selectSource(s: SourceSel) {
     setSel(s)
     setSelUrl(null)
-    // Al elegir un resultado, mostramos la comparación; en el original, el editor.
-    setView(s.parentJobId ? 'compare' : 'edit')
+    // No forzamos vista: el comparador es opcional (se activa con el toggle).
     api
       .get(s.apiPath, { responseType: 'blob' })
       .then((r) => setSelUrl(URL.createObjectURL(r.data as Blob)))
