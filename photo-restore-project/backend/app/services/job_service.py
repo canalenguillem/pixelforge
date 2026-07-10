@@ -62,12 +62,17 @@ def enqueue_restoration(
     codeformer_fidelity: float = 0.5,
     flux_denoise: float = 0.85,
     enable_hdr_lora: bool = False,
+    colorize: bool = False,
 ) -> ProcessingJob:
     """Crea el job (queued) y lo encola en Celery. Enruta por `workflow_mode`."""
     root_upload_id = _resolve_root_upload(db, user_id, upload_id, parent_job_id)
 
     if workflow_mode == "flux":
-        params: dict = {"flux_denoise": flux_denoise, "enable_hdr_lora": enable_hdr_lora}
+        params: dict = {
+            "flux_denoise": flux_denoise,
+            "enable_hdr_lora": enable_hdr_lora,
+            "colorize": colorize,
+        }
     else:
         params = {"restoration_strength": restoration_strength, "codeformer_fidelity": codeformer_fidelity}
 
@@ -94,6 +99,7 @@ def enqueue_restoration(
         codeformer_fidelity=codeformer_fidelity,
         flux_denoise=flux_denoise,
         enable_hdr_lora=enable_hdr_lora,
+        colorize=colorize,
     )
     return job
 

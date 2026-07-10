@@ -36,13 +36,16 @@ class JobCreate(BaseModel):
 
     # --- Flux Kontext (GGUF) ---
     enable_hdr_lora: bool = Field(
-        default=False, description="Flux: aplicar HDR LoRA (requiere tenerla instalada)"
+        default=True, description="Flux: aplicar HDR LoRA si está instalada (más realismo/rango)"
+    )
+    colorize: bool = Field(
+        default=False, description="Flux: colorizar la foto (si no, restaura en blanco y negro)"
     )
     flux_denoise: float = Field(
-        default=0.85,
+        default=0.9,
         ge=0.5,
         le=1.0,
-        description="Flux: fuerza de restauración. 0.5 sutil, 1.0 restauración completa (recomendado ~0.85)",
+        description="Flux: fuerza de restauración. 0.5 sutil, 1.0 restauración completa (recomendado ~0.9)",
     )
 
 

@@ -29,16 +29,35 @@ FLUX_UNET_GGUF = "flux1-kontext-dev-Q6_K.gguf"
 FLUX_CLIP_L = "clip_l.safetensors"
 FLUX_CLIP_T5 = "t5xxl_fp8_e4m3fn_scaled.safetensors"
 FLUX_VAE = "ae.safetensors"
-FLUX_HDR_LORA = ""  # nombre del fichero de LoRA HDR; vacío = no instalada (se ignora enable_hdr_lora)
+# LoRA HDR (opcional): dale realismo/rango dinámico. Se activa con la keyword "HDR"
+# en el prompt (por eso ambos prompts terminan en HDR). Si no está instalada en
+# ComfyUI, el worker lo detecta y la ignora sin romper.
+FLUX_HDR_LORA = "F.1_realistic_HDR_v1.safetensors"
 
 OUTPUT_PREFIX = "photorestore/restored"
 INPAINT_PREFIX = "photorestore/inpaint"
 FLUX_PREFIX = "photorestore/flux"
 
-FLUX_RESTORE_PROMPT = (
-    "Restore this old damaged photograph: remove stains, scratches and dust, "
-    "sharpen and enhance clarity and fine detail, natural realistic result, "
-    "keep the people, their faces and the composition unchanged"
+# Prompts curados (adaptados del workflow de referencia): instrucciones de edición
+# para Flux Kontext, muy explícitas en PRESERVAR identidad/composición.
+FLUX_PROMPT_BW = (
+    "Change the photographic damage, cracks and scratches of the image to a fully "
+    "restored, pristine, high quality black and white photograph "
+    "| Keep the people's facial features, hair, clothes, accessories, poses, "
+    "expressions and the original composition unchanged "
+    "| Preserve every subject's identity, camera angle and framing exactly "
+    "| Adjust the black and white tones for a clear and natural appearance "
+    "| Remove brightness spots and fingerprints, HDR"
+)
+FLUX_PROMPT_COLOR = (
+    "Change the photographic damage, cracks, scratches and monochrome coloration of "
+    "the image to a fully restored, pristine, colorized photograph "
+    "| Keep the people's facial features, hair, clothes, accessories, poses, "
+    "expressions and the original composition unchanged "
+    "| Preserve every subject's identity, camera angle and framing exactly "
+    "| Apply realistic colorization to skin tones, hair, clothing and background "
+    "for a natural appearance "
+    "| Remove brightness spots and fingerprints, HDR"
 )
 
 DEFAULT_POSITIVE = (
@@ -152,11 +171,12 @@ def build_restoration_workflow(
 def build_restoration_flux_workflow(
     image_name: str,
     denoise: float = 0.85,
-    enable_hdr_lora: bool = False,
+    colorize: bool = False,
+    use_hdr_lora: bool = False,
     guidance: float = 2.5,
-    steps: int = 20,
+    steps: int = 30,
     seed: int = 42,
-    positive: str = FLUX_RESTORE_PROMPT,
+    positive: str | None = None,
 ) -> dict[str, Any]:
     """Workflow de restauración con Flux Kontext (GGUF) — calidad superior.
 
@@ -165,8 +185,14 @@ def build_restoration_flux_workflow(
     A `denoise` alto (~0.85-1.0) restaura de verdad preservando a las personas;
     por debajo de 0.5 apenas cambia. cfg=1 + FluxGuidance (Flux no usa CFG clásico).
 
+    - colorize: usa el prompt de colorización (si no, restaura en B&N).
+    - use_hdr_lora: aplica la LoRA HDR (el worker resuelve si está instalada).
+
     Nota: mucho más lento y pesado que Epic (~14 GB en VRAM).
     """
+    if positive is None:
+        positive = FLUX_PROMPT_COLOR if colorize else FLUX_PROMPT_BW
+
     wf: dict[str, Any] = {
         "unet": {"class_type": "UnetLoaderGGUF", "inputs": {"unet_name": FLUX_UNET_GGUF}},
         "clip": {
@@ -214,8 +240,8 @@ def build_restoration_flux_workflow(
         },
     }
 
-    # HDR LoRA opcional (solo si hay un fichero configurado; si no, se ignora).
-    if enable_hdr_lora and FLUX_HDR_LORA:
+    # HDR LoRA opcional (el worker ya ha verificado que está instalada).
+    if use_hdr_lora and FLUX_HDR_LORA:
         wf["lora"] = {
             "class_type": "LoraLoaderModelOnly",
             "inputs": {"model": ["unet", 0], "lora_name": FLUX_HDR_LORA, "strength_model": 1.0},

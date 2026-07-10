@@ -38,6 +38,7 @@ def create_job(data: JobCreate, current_user: CurrentUser, db: DbSession) -> Job
         codeformer_fidelity=data.codeformer_fidelity,
         flux_denoise=data.flux_denoise,
         enable_hdr_lora=data.enable_hdr_lora,
+        colorize=data.colorize,
     )
     return JobRead.model_validate(job)
 

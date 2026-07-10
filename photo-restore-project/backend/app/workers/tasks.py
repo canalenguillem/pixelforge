@@ -62,6 +62,7 @@ def process_restoration_job(
     codeformer_fidelity: float = 0.5,
     flux_denoise: float = 0.85,
     enable_hdr_lora: bool = False,
+    colorize: bool = False,
 ) -> None:
     """Procesa un job de restauración contra ComfyUI, enrutando por workflow_mode."""
     db = SessionLocal()
@@ -89,8 +90,12 @@ def process_restoration_job(
         # Routing por modo de workflow
         timeout = 600.0
         if workflow_mode == "flux":
+            # Aplica la HDR LoRA solo si el usuario la pidió Y está instalada.
+            use_hdr = enable_hdr_lora and (
+                workflows.FLUX_HDR_LORA in comfyui_service.list_loras(server_url, api_key)
+            )
             workflow = workflows.build_restoration_flux_workflow(
-                comfy_name, denoise=flux_denoise, enable_hdr_lora=enable_hdr_lora
+                comfy_name, denoise=flux_denoise, colorize=colorize, use_hdr_lora=use_hdr
             )
             timeout = _FLUX_TIMEOUT
         else:  # epic (default)

@@ -26,8 +26,9 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
   const [engine, setEngine] = useState<WorkflowMode>('epic')
   const [strength, setStrength] = useState(0.35)
   const [fidelity, setFidelity] = useState(0.5)
-  const [fluxDenoise, setFluxDenoise] = useState(0.85)
-  const [enableHdr, setEnableHdr] = useState(false)
+  const [fluxDenoise, setFluxDenoise] = useState(0.9)
+  const [enableHdr, setEnableHdr] = useState(true)
+  const [colorize, setColorize] = useState(false)
   const [brushSize, setBrushSize] = useState(24)
   const [progress, setProgress] = useState(0)
   const [processing, setProcessing] = useState(false)
@@ -53,7 +54,7 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
     const base = { upload_id: source.uploadId, parent_job_id: source.parentJobId }
     const payload: CreateJobPayload =
       engine === 'flux'
-        ? { ...base, workflow_mode: 'flux', flux_denoise: fluxDenoise, enable_hdr_lora: enableHdr }
+        ? { ...base, workflow_mode: 'flux', flux_denoise: fluxDenoise, enable_hdr_lora: enableHdr, colorize }
         : { ...base, workflow_mode: 'epic', restoration_strength: strength, codeformer_fidelity: fidelity }
     void runJob(() => jobService.create(payload))
   }
@@ -107,11 +108,15 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
                 <Slider label="Fuerza de restauración" hint={fluxDenoise < 0.7 ? 'sutil' : fluxDenoise >= 0.95 ? 'completa' : 'fuerte'}
                   min={0.5} max={1} step={0.05} value={fluxDenoise} onChange={setFluxDenoise} disabled={processing} format={(v) => v.toFixed(2)} />
                 <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={colorize} disabled={processing} onChange={(e) => setColorize(e.target.checked)} className="accent-primary" />
+                  Colorizar <span className="text-muted-foreground">(si no, restaura en blanco y negro)</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={enableHdr} disabled={processing} onChange={(e) => setEnableHdr(e.target.checked)} className="accent-primary" />
-                  HDR LoRA (más vibrancia)
+                  HDR LoRA <span className="text-muted-foreground">(más realismo, si está instalada)</span>
                 </label>
                 <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-                  Flux da mayor calidad pero es bastante más lento (~2 min, o más la primera vez) y puede colorizar.
+                  Flux da mayor calidad pero es bastante más lento (~2 min, o más la primera vez).
                 </p>
               </>
             )}

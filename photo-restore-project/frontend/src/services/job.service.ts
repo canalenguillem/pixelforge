@@ -12,6 +12,7 @@ export interface CreateJobPayload {
   // Flux
   flux_denoise?: number
   enable_hdr_lora?: boolean
+  colorize?: boolean
 }
 
 export const jobService = {

@@ -57,3 +57,7 @@ npm-debug.log*
 *.swp
 .DS_Store
 Thumbs.db
+
+# Workflow comprado (asset privado, no redistribuir)
+Photo_restoration_kontext_v1.json
+*.paid.json

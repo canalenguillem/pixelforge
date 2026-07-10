@@ -59,6 +59,19 @@ def check_connection(base_url: str, api_key: str | None = None) -> dict[str, Any
         raise _wrap_error(base_url, exc)
 
 
+def list_loras(base_url: str, api_key: str | None = None) -> list[str]:
+    """Devuelve los nombres de LoRAs disponibles en ComfyUI (o [] si falla)."""
+    try:
+        with _client(base_url, api_key, timeout=_CONNECT_TIMEOUT) as client:
+            resp = client.get("/object_info/LoraLoaderModelOnly")
+            resp.raise_for_status()
+            spec = resp.json()["LoraLoaderModelOnly"]["input"]["required"]["lora_name"]
+            options = spec[1].get("options") if len(spec) > 1 and isinstance(spec[1], dict) else spec[0]
+            return list(options or [])
+    except (httpx.HTTPError, KeyError, IndexError, TypeError):
+        return []
+
+
 # -----------------------------------------------------------------------------
 # 2) Subir imagen a ComfyUI (a su carpeta input/)
 # -----------------------------------------------------------------------------
