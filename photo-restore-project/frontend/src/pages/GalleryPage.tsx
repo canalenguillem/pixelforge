@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus, RotateCcw, RotateCw, Columns2, Wand2 } from 'lucide-react'
+import { ArrowLeft, ImageOff, Loader2, Trash2, FileUp, ImagePlus, RotateCcw, RotateCw, Columns2, Wand2, Download } from 'lucide-react'
 import { AuthImage } from '@/components/Common/AuthImage'
 import { ProcessPanel } from '@/components/Editor/ProcessPanel'
 import { BeforeAfterSlider } from '@/components/Editor/BeforeAfterSlider'
@@ -193,6 +193,7 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState<SourceSel>({ apiPath: `/uploads/${uploadId}/download`, label: 'Original' })
   const [selUrl, setSelUrl] = useState<string | null>(null)
+  const [selType, setSelType] = useState<string>('image/png')
   const [origUrl, setOrigUrl] = useState<string | null>(null)
   const [view, setView] = useState<'compare' | 'edit'>('edit')
   const navigate = useNavigate()
@@ -238,9 +239,16 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
     // No forzamos vista: el comparador es opcional (se activa con el toggle).
     api
       .get(s.apiPath, { responseType: 'blob' })
-      .then((r) => setSelUrl(URL.createObjectURL(r.data as Blob)))
+      .then((r) => {
+        const blob = r.data as Blob
+        setSelType(blob.type || 'image/png')
+        setSelUrl(URL.createObjectURL(blob))
+      })
       .catch(() => setError('No se pudo cargar la imagen seleccionada'))
   }
+
+  const dlExt = (selType.split('/')[1] || 'png').replace('jpeg', 'jpg')
+  const dlName = sel.parentJobId ? `restaurada_${sel.parentJobId}.${dlExt}` : `original_${uploadId}.${dlExt}`
 
   const completed = (jobs ?? []).filter((j) => j.status === 'completed')
 
@@ -251,13 +259,25 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
           <ArrowLeft className="h-4 w-4" /> Galería
         </Link>
         <h1 className="text-xl font-bold">Foto #{uploadId}</h1>
-        <button
-          onClick={handleDeleteUpload}
-          title="Borrar foto y todos sus procesados"
-          className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
-        >
-          <Trash2 className="h-4 w-4" /> Borrar
-        </button>
+        <div className="ml-auto flex gap-2">
+          {selUrl && (
+            <a
+              href={selUrl}
+              download={dlName}
+              title={`Descargar ${sel.label} a máxima resolución`}
+              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              <Download className="h-4 w-4" /> Descargar
+            </a>
+          )}
+          <button
+            onClick={handleDeleteUpload}
+            title="Borrar foto y todos sus procesados"
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-4 w-4" /> Borrar
+          </button>
+        </div>
       </div>
 
       {error && <p className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
