@@ -1,0 +1,180 @@
+{
+  "load": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example.jpg"
+    }
+  },
+  "scale": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "load",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": 1024,
+      "height": 680,
+      "crop": "disabled"
+    }
+  },
+  "ckpt": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "epicrealism.safetensors"
+    }
+  },
+  "pos": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "restored vintage black and white photograph, monochrome, sharp focus, fine detail, clean, high quality, realistic, natural skin texture, clear fabric",
+      "clip": [
+        "ckpt",
+        1
+      ]
+    }
+  },
+  "neg": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "stains, brown spots, water damage, scratches, dust, creases, fold, blur, low quality, noise, discoloration, jpeg artifacts, deformed, colorful, oversaturated",
+      "clip": [
+        "ckpt",
+        1
+      ]
+    }
+  },
+  "cnet": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "SD1.5\\control_v11f1e_sd15_tile_fp16.safetensors"
+    }
+  },
+  "cn": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": [
+        "pos",
+        0
+      ],
+      "negative": [
+        "neg",
+        0
+      ],
+      "control_net": [
+        "cnet",
+        0
+      ],
+      "image": [
+        "scale",
+        0
+      ],
+      "strength": 0.9,
+      "start_percent": 0.0,
+      "end_percent": 1.0
+    }
+  },
+  "enc": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "scale",
+        0
+      ],
+      "vae": [
+        "ckpt",
+        2
+      ]
+    }
+  },
+  "ks": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "ckpt",
+        0
+      ],
+      "seed": 42,
+      "steps": 20,
+      "cfg": 7.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "positive": [
+        "cn",
+        0
+      ],
+      "negative": [
+        "cn",
+        1
+      ],
+      "latent_image": [
+        "enc",
+        0
+      ],
+      "denoise": 0.35
+    }
+  },
+  "dec": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "ks",
+        0
+      ],
+      "vae": [
+        "ckpt",
+        2
+      ]
+    }
+  },
+  "upm": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": {
+      "model_name": "RealESRGAN_x2.pth"
+    }
+  },
+  "ups": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": {
+      "upscale_model": [
+        "upm",
+        0
+      ],
+      "image": [
+        "dec",
+        0
+      ]
+    }
+  },
+  "frm": {
+    "class_type": "FaceRestoreModelLoader",
+    "inputs": {
+      "model_name": "codeformer.pth"
+    }
+  },
+  "fr": {
+    "class_type": "FaceRestoreCFWithModel",
+    "inputs": {
+      "facerestore_model": [
+        "frm",
+        0
+      ],
+      "image": [
+        "ups",
+        0
+      ],
+      "facedetection": "retinaface_resnet50",
+      "codeformer_fidelity": 0.5
+    }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "fr",
+        0
+      ],
+      "filename_prefix": "photorestore/restored"
+    }
+  }
+}
