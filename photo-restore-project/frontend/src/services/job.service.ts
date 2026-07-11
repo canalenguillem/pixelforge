@@ -44,6 +44,11 @@ export const jobService = {
     return data as { items: Job[]; total: number; page: number; page_size: number }
   },
 
+  /** Borra un job procesado (resultado + fichero). */
+  async remove(id: number): Promise<void> {
+    await api.delete(`/jobs/${id}`)
+  },
+
   /** Descarga la imagen restaurada como blob (para mostrarla con object URL). */
   async result(id: number): Promise<Blob> {
     const { data } = await api.get(`/jobs/${id}/result`, { responseType: 'blob' })

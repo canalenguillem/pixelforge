@@ -196,7 +196,24 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   const [selType, setSelType] = useState<string>('image/png')
   const [origUrl, setOrigUrl] = useState<string | null>(null)
   const [view, setView] = useState<'compare' | 'edit'>('edit')
+  const [deletingJob, setDeletingJob] = useState<number | null>(null)
   const navigate = useNavigate()
+
+  async function handleDeleteJob(jobId: number) {
+    if (!window.confirm('¿Borrar este procesado?')) return
+    setDeletingJob(jobId)
+    try {
+      await jobService.remove(jobId)
+      if (sel.parentJobId === jobId) {
+        selectSource({ apiPath: `/uploads/${uploadId}/download`, label: 'Original' })
+      }
+      await refresh()
+    } catch (err) {
+      setError(apiError(err, 'No se pudo borrar el procesado'))
+    } finally {
+      setDeletingJob(null)
+    }
+  }
 
   async function handleDeleteUpload() {
     if (!window.confirm('¿Borrar esta foto y TODOS sus procesados? No se puede deshacer.')) return
@@ -300,6 +317,8 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
               src={`/jobs/${j.id}/result`}
               label={jobLabel(j)}
               sublabel={j.parent_job_id ? `← #${j.parent_job_id}` : undefined}
+              onDelete={() => handleDeleteJob(j.id)}
+              deleting={deletingJob === j.id}
             />
           ))}
         </div>
@@ -339,22 +358,39 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   )
 }
 
-function Thumb({ active, onClick, src, label, sublabel }: {
-  active: boolean; onClick: () => void; src: string; label: string; sublabel?: string
+function Thumb({ active, onClick, src, label, sublabel, onDelete, deleting }: {
+  active: boolean
+  onClick: () => void
+  src: string
+  label: string
+  sublabel?: string
+  onDelete?: () => void
+  deleting?: boolean
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`shrink-0 overflow-hidden rounded-lg border-2 text-left transition-colors ${
+    <div
+      className={`group relative shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${
         active ? 'border-primary' : 'border-transparent hover:border-border'
       }`}
     >
-      <AuthImage src={src} className="h-24 w-24 bg-muted object-cover" />
-      <div className="w-24 px-1.5 py-1 text-[11px] leading-tight">
-        <div className="truncate font-medium">{label}</div>
-        {sublabel && <div className="truncate text-muted-foreground">{sublabel}</div>}
-      </div>
-    </button>
+      <button onClick={onClick} className="block text-left">
+        <AuthImage src={src} className="h-24 w-24 bg-muted object-cover" />
+        <div className="w-24 px-1.5 py-1 text-[11px] leading-tight">
+          <div className="truncate font-medium">{label}</div>
+          {sublabel && <div className="truncate text-muted-foreground">{sublabel}</div>}
+        </div>
+      </button>
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          title="Borrar este procesado"
+          className="absolute right-1 top-1 rounded bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-destructive group-hover:opacity-100 disabled:opacity-100"
+        >
+          {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+        </button>
+      )}
+    </div>
   )
 }
 

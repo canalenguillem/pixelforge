@@ -10,7 +10,7 @@ import os
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -257,8 +257,17 @@ def create_and_run(
 
 
 def delete_job(db: Session, user_id: int, job_id: int) -> None:
-    """Elimina el resultado procesado y el registro del job."""
+    """Elimina el resultado procesado y el registro del job.
+
+    Los jobs encadenados a partir de este (hijos) quedan huérfanos: se les pone
+    parent_job_id a NULL para no dejar referencias colgando.
+    """
     job = get_job(db, user_id, job_id)
+    db.execute(
+        update(ProcessingJob)
+        .where(ProcessingJob.parent_job_id == job_id)
+        .values(parent_job_id=None)
+    )
     if job.processed_image_path:
         file_handlers.delete_file(job.processed_image_path)
     db.delete(job)
