@@ -1,0 +1,172 @@
+{
+  "unet": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": {
+      "unet_name": "flux1-kontext-dev-Q6_K.gguf"
+    }
+  },
+  "clip": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "flux"
+    }
+  },
+  "vae": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    }
+  },
+  "load": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example.jpg"
+    }
+  },
+  "scale": {
+    "class_type": "FluxKontextImageScale",
+    "inputs": {
+      "image": [
+        "load",
+        0
+      ]
+    }
+  },
+  "encode": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "scale",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    }
+  },
+  "pos": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "clip",
+        0
+      ],
+      "text": "Change the photographic damage, cracks, scratches and monochrome coloration of the image to a fully restored, pristine, colorized photograph | Keep the people's facial features, hair, clothes, accessories, poses, expressions and the original composition unchanged | Preserve every subject's identity, camera angle and framing exactly | Apply realistic colorization to skin tones, hair, clothing and background for a natural appearance | Remove brightness spots and fingerprints, HDR"
+    }
+  },
+  "ref": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "pos",
+        0
+      ],
+      "latent": [
+        "encode",
+        0
+      ]
+    }
+  },
+  "guide": {
+    "class_type": "FluxGuidance",
+    "inputs": {
+      "conditioning": [
+        "ref",
+        0
+      ],
+      "guidance": 2.5
+    }
+  },
+  "neg": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "pos",
+        0
+      ]
+    }
+  },
+  "ks": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "lora",
+        0
+      ],
+      "seed": 42,
+      "steps": 30,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "guide",
+        0
+      ],
+      "negative": [
+        "neg",
+        0
+      ],
+      "latent_image": [
+        "encode",
+        0
+      ],
+      "denoise": 0.9
+    }
+  },
+  "dec": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "ks",
+        0
+      ],
+      "vae": [
+        "vae",
+        0
+      ]
+    }
+  },
+  "upm": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": {
+      "model_name": "RealESRGAN_x2.pth"
+    }
+  },
+  "ups": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": {
+      "upscale_model": [
+        "upm",
+        0
+      ],
+      "image": [
+        "dec",
+        0
+      ]
+    }
+  },
+  "save": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "ups",
+        0
+      ],
+      "filename_prefix": "photorestore/flux"
+    }
+  },
+  "lora": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "unet",
+        0
+      ],
+      "lora_name": "F.1_realistic_HDR_v1.safetensors",
+      "strength_model": 1.0
+    }
+  }
+}

@@ -7,7 +7,20 @@ restauración por dentro, antes de enseñar la app web.
 | Fichero | Modo en la app | Nodos clave |
 |---------|----------------|-------------|
 | `epic_restoration.api.json` | **Epic** (rápido) | CheckpointLoader (epicrealism) → ImageScale → VAEEncode → **Tile ControlNet** → KSampler (denoise 0.35) → VAEDecode → **RealESRGAN x2** → **CodeFormer** (caras) → SaveImage |
-| `flux_restoration.api.json` | **Flux · calidad** | UnetLoaderGGUF (kontext) + DualCLIP + VAE → FluxKontextImageScale → VAEEncode → CLIPTextEncode → **ReferenceLatent** → **FluxGuidance** → **HDR LoRA** → KSampler (cfg 1, 30 steps) → VAEDecode → RealESRGAN x2 → SaveImage |
+| `flux_restoration.api.json` | **Flux · calidad** (B&N) | UnetLoaderGGUF (kontext) + DualCLIP + VAE → FluxKontextImageScale → VAEEncode → CLIPTextEncode → **ReferenceLatent** → **FluxGuidance** → **HDR LoRA** → KSampler (cfg 1, 30 steps) → VAEDecode → RealESRGAN x2 → SaveImage |
+| `flux_colorization.api.json` | **Flux · Colorizar** | Igual que el de Flux pero con el prompt de colorización |
+
+## Colorizar (Flux)
+
+En Flux Kontext la colorización se decide por el **prompt** del nodo `CLIPTextEncode`:
+- **B&N** (`flux_restoration.api.json`): "...restored, pristine, high quality **black and white** photograph..."
+- **Color** (`flux_colorization.api.json`): "...restored, pristine, **colorized** photograph... Apply realistic colorization to skin tones, hair, clothing and background..."
+
+Para colorizar sin cambiar de fichero, pega este texto en el nodo `CLIPTextEncode`:
+
+> Change the photographic damage, cracks, scratches and monochrome coloration of the image to a fully restored, pristine, colorized photograph | Keep the people's facial features, hair, clothes, accessories, poses, expressions and the original composition unchanged | Preserve every subject's identity, camera angle and framing exactly | Apply realistic colorization to skin tones, hair, clothing and background for a natural appearance | Remove brightness spots and fingerprints, HDR
+
+(En la app, esto es el check **Colorizar**.)
 
 ## Cómo cargarlos en ComfyUI
 
