@@ -37,6 +37,24 @@ FLUX_HDR_LORA = "F.1_realistic_HDR_v1.safetensors"
 OUTPUT_PREFIX = "photorestore/restored"
 INPAINT_PREFIX = "photorestore/inpaint"
 FLUX_PREFIX = "photorestore/flux"
+STYLE_PREFIX = "photorestore/style"
+
+# --- Z-Image Turbo (estilos rápidos, img2img) ---
+ZIMAGE_UNET = "z_image_bf16.safetensors"
+ZIMAGE_CLIP = "qwen_3_4b.safetensors"  # cargado con type="lumina2"
+ZIMAGE_VAE = "ae.safetensors"
+
+# Presets de estilo (clave -> prompt). El img2img preserva la composición;
+# el prompt solo aporta el ESTILO.
+STYLE_PRESETS: dict[str, str] = {
+    "oleo": "vibrant oil painting, impressionist style, thick expressive brush strokes, warm artistic colors, fine art masterpiece",
+    "acuarela": "soft watercolor painting, delicate washes, flowing pastel colors, hand-painted, light and airy, artistic",
+    "anime": "anime illustration, cel shading, clean line art, vibrant saturated colors, detailed anime artwork",
+    "comic": "comic book illustration, bold black ink outlines, halftone shading, vivid saturated colors, pop art style",
+    "lapiz": "detailed graphite pencil sketch, hand-drawn, fine cross-hatching, monochrome drawing, sketchbook",
+    "acrilico": "colorful acrylic painting, bold vivid strokes, textured canvas, contemporary art",
+}
+DEFAULT_STYLE = "oleo"
 
 # Prompts curados (adaptados del workflow de referencia): instrucciones de edición
 # para Flux Kontext, muy explícitas en PRESERVAR identidad/composición.
@@ -249,6 +267,49 @@ def build_restoration_flux_workflow(
         wf["ks"]["inputs"]["model"] = ["lora", 0]
 
     return wf
+
+
+def build_zimage_style_workflow(
+    image_name: str,
+    work_width: int,
+    work_height: int,
+    prompt: str,
+    denoise: float = 0.5,
+    steps: int = 14,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Estiliza una imagen con Z-Image Turbo (img2img): óleo, anime, etc.
+
+    img2img (VAEEncode + denoise) preserva la composición y reestiliza; el
+    `denoise` (0.4-0.7) controla cuánta libertad tiene el estilo. Rápido.
+    Grafo del workflow oficial de Z-Image Turbo (lumina2 CLIP + ae VAE +
+    ModelSamplingAuraFlow + res_multistep).
+    """
+    return {
+        "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": ZIMAGE_UNET, "weight_dtype": "default"}},
+        "sampling": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": 3.0}},
+        "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": ZIMAGE_CLIP, "type": "lumina2", "device": "default"}},
+        "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
+        "load": {"class_type": "LoadImage", "inputs": {"image": image_name}},
+        "scale": {
+            "class_type": "ImageScale",
+            "inputs": {"image": ["load", 0], "upscale_method": "lanczos", "width": work_width, "height": work_height, "crop": "disabled"},
+        },
+        "enc": {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": ["vae", 0]}},
+        "pos": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["clip", 0], "text": prompt}},
+        "neg": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}},
+        "ks": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["sampling", 0], "seed": seed, "steps": steps, "cfg": 1.0,
+                "sampler_name": "res_multistep", "scheduler": "simple",
+                "positive": ["pos", 0], "negative": ["neg", 0],
+                "latent_image": ["enc", 0], "denoise": denoise,
+            },
+        },
+        "dec": {"class_type": "VAEDecode", "inputs": {"samples": ["ks", 0], "vae": ["vae", 0]}},
+        "save": {"class_type": "SaveImage", "inputs": {"images": ["dec", 0], "filename_prefix": STYLE_PREFIX}},
+    }
 
 
 def build_inpaint_workflow(image_name: str, mask_name: str, grow: int = 8) -> dict[str, Any]:

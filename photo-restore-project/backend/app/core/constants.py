@@ -25,6 +25,7 @@ class JobType(str, Enum):
     ENHANCEMENT = "enhancement"
     UPSCALE = "upscale"
     INPAINT = "inpaint"
+    STYLE = "style"
 
 
 class WorkflowMode(str, Enum):

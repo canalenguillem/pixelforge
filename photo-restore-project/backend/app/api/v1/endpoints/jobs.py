@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.security import ACCESS_TOKEN_TYPE, decode_token
 from app.db.session import SessionLocal
 from app.models.job import ProcessingJob
-from app.schemas.job import JobCreate, JobListResponse, JobRead
+from app.schemas.job import JobCreate, JobListResponse, JobRead, StyleJobCreate
 from app.services import job_service
 from app.utils.exceptions import AppError
 
@@ -39,6 +39,16 @@ def create_job(data: JobCreate, current_user: CurrentUser, db: DbSession) -> Job
         flux_denoise=data.flux_denoise,
         enable_hdr_lora=data.enable_hdr_lora,
         colorize=data.colorize,
+    )
+    return JobRead.model_validate(job)
+
+
+@router.post("/style", response_model=JobRead, status_code=status.HTTP_202_ACCEPTED)
+def create_style_job(data: StyleJobCreate, current_user: CurrentUser, db: DbSession) -> JobRead:
+    """Encola un job de estilizado (Z-Image img2img)."""
+    job = job_service.enqueue_style(
+        db, current_user.id, data.upload_id, data.style, data.strength,
+        parent_job_id=data.parent_job_id,
     )
     return JobRead.model_validate(job)
 

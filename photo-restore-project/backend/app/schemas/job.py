@@ -49,6 +49,18 @@ class JobCreate(BaseModel):
     )
 
 
+class StyleJobCreate(BaseModel):
+    """Petición de estilizado (Z-Image img2img)."""
+
+    upload_id: int
+    parent_job_id: int | None = None
+    style: str = Field(default="oleo", description="Preset de estilo (oleo, acuarela, anime, comic, lapiz, acrilico)")
+    strength: float = Field(
+        default=0.5, ge=0.3, le=0.85,
+        description="Intensidad del estilo (denoise). 0.4 sutil .. 0.8 muy estilizado",
+    )
+
+
 class JobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Loader2, Sparkles, Eraser, Brush, Trash2, Zap } from 'lucide-react'
+import { Loader2, Sparkles, Eraser, Brush, Trash2, Zap, Palette } from 'lucide-react'
 import { MaskEditor, type MaskEditorHandle } from '@/components/Editor/MaskEditor'
 import { Lightbox } from '@/components/Common/Lightbox'
 import { jobService, waitForJob, type CreateJobPayload } from '@/services/job.service'
@@ -19,7 +19,17 @@ interface ProcessPanelProps {
   onDone: (job: Job) => void
 }
 
-type Mode = 'restore' | 'inpaint'
+type Mode = 'restore' | 'inpaint' | 'style'
+
+/** Presets de estilo (clave = la que espera el backend en STYLE_PRESETS). */
+const STYLE_OPTIONS: { key: string; label: string; emoji: string }[] = [
+  { key: 'oleo', label: 'Óleo', emoji: '🎨' },
+  { key: 'acuarela', label: 'Acuarela', emoji: '💧' },
+  { key: 'anime', label: 'Anime', emoji: '✨' },
+  { key: 'comic', label: 'Cómic', emoji: '💥' },
+  { key: 'lapiz', label: 'Lápiz', emoji: '✏️' },
+  { key: 'acrilico', label: 'Acrílico', emoji: '🖌️' },
+]
 
 /** Controles de procesado para una imagen fuente (original o resultado). */
 export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
@@ -30,6 +40,8 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
   const [fluxDenoise, setFluxDenoise] = useState(1.0)
   const [enableHdr, setEnableHdr] = useState(true)
   const [colorize, setColorize] = useState(false)
+  const [style, setStyle] = useState('oleo')
+  const [styleStrength, setStyleStrength] = useState(0.5)
   const [brushSize, setBrushSize] = useState(24)
   const [progress, setProgress] = useState(0)
   const [processing, setProcessing] = useState(false)
@@ -70,6 +82,12 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
     void runJob(() => jobService.createInpaint(source.uploadId, mask, 8, source.parentJobId))
   }
 
+  function handleStyle() {
+    void runJob(() => jobService.createStyle(source.uploadId, style, styleStrength, source.parentJobId))
+  }
+
+  const primaryAction = mode === 'restore' ? handleRestore : mode === 'inpaint' ? handleInpaint : handleStyle
+
   return (
     <div className="space-y-5">
       {error && (
@@ -79,9 +97,10 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
       <div className="flex gap-2 rounded-lg bg-muted p-1">
         <Tab active={mode === 'restore'} disabled={processing} onClick={() => setMode('restore')} icon={Sparkles} label="Restaurar" />
         <Tab active={mode === 'inpaint'} disabled={processing} onClick={() => setMode('inpaint')} icon={Eraser} label="Quitar manchas" />
+        <Tab active={mode === 'style'} disabled={processing} onClick={() => setMode('style')} icon={Palette} label="Estilos" />
       </div>
 
-      {mode === 'restore' ? (
+      {mode !== 'inpaint' ? (
         <img
           src={source.imageUrl}
           alt="Fuente"
@@ -96,7 +115,30 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
       {zoom && <Lightbox src={source.imageUrl} onClose={() => setZoom(false)} />}
 
       <div className="space-y-4 rounded-xl border border-border p-5">
-        {mode === 'restore' ? (
+        {mode === 'style' ? (
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              {STYLE_OPTIONS.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setStyle(s.key)}
+                  disabled={processing}
+                  className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-3 text-sm font-medium transition-colors disabled:opacity-50 ${
+                    style === s.key ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span className="text-xl">{s.emoji}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <Slider label="Intensidad del estilo" hint={styleStrength <= 0.4 ? 'sutil' : styleStrength >= 0.65 ? 'muy artístico' : 'equilibrado'}
+              min={0.3} max={0.85} step={0.05} value={styleStrength} onChange={setStyleStrength} disabled={processing} format={(v) => v.toFixed(2)} />
+            <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+              Reinterpreta la foto con Z-Image (rápido, ~20s). Más intensidad = más artístico pero menos fiel a la foto original.
+            </p>
+          </>
+        ) : mode === 'restore' ? (
           <>
             <div className="flex gap-2 rounded-lg bg-muted p-1">
               <Tab active={engine === 'epic'} disabled={processing} onClick={() => setEngine('epic')} icon={Sparkles} label="Epic · rápido" />
@@ -141,7 +183,7 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
         )}
 
         <button
-          onClick={mode === 'restore' ? handleRestore : handleInpaint}
+          onClick={primaryAction}
           disabled={processing}
           className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
@@ -149,6 +191,8 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
             <><Loader2 className="h-4 w-4 animate-spin" /> Procesando…</>
           ) : mode === 'restore' ? (
             <><Sparkles className="h-4 w-4" /> Restaurar</>
+          ) : mode === 'style' ? (
+            <><Palette className="h-4 w-4" /> Aplicar estilo</>
           ) : (
             <><Brush className="h-4 w-4" /> Quitar manchas</>
           )}

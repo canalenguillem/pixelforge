@@ -134,6 +134,35 @@ def enqueue_inpaint(
     return job
 
 
+def enqueue_style(
+    db: Session,
+    user_id: int,
+    upload_id: int,
+    style: str,
+    strength: float = 0.5,
+    parent_job_id: int | None = None,
+) -> ProcessingJob:
+    """Crea un job de estilo (Z-Image img2img) y lo encola en Celery."""
+    root_upload_id = _resolve_root_upload(db, user_id, upload_id, parent_job_id)
+
+    job = ProcessingJob(
+        user_id=user_id,
+        upload_id=root_upload_id,
+        parent_job_id=parent_job_id,
+        status=JobStatus.QUEUED.value,
+        job_type=JobType.STYLE.value,
+        params={"style": style, "strength": strength},
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    from app.workers.tasks import process_style_job
+
+    process_style_job.delay(job.id, style, strength)
+    return job
+
+
 def get_job(db: Session, user_id: int, job_id: int) -> ProcessingJob:
     job = db.get(ProcessingJob, job_id)
     if job is None or job.user_id != user_id:

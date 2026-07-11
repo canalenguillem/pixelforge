@@ -145,6 +145,76 @@ def process_restoration_job(
         db.close()
 
 
+@celery_app.task(name="process_style_job")
+def process_style_job(job_id: int, style: str, strength: float = 0.5) -> None:
+    """Estiliza una imagen con Z-Image Turbo (img2img)."""
+    db = SessionLocal()
+    started = time.monotonic()
+    try:
+        job = db.get(ProcessingJob, job_id)
+        if job is None:
+            return
+
+        server_url = settings.COMFYUI_DEFAULT_URL
+        api_key = settings.COMFYUI_API_KEY or None
+
+        job.status = JobStatus.PROCESSING.value
+        db.commit()
+        _publish(job_id, {"status": "processing", "stage": "uploading", "progress": 0})
+
+        content, in_filename, in_w, in_h = _resolve_input(db, job)
+        uploaded = comfyui_service.upload_image(server_url, in_filename, content, api_key)
+        comfy_name = uploaded["name"]
+        if uploaded.get("subfolder"):
+            comfy_name = f"{uploaded['subfolder']}/{comfy_name}"
+
+        _publish(job_id, {"status": "processing", "stage": "generating", "progress": 0})
+
+        prompt = workflows.STYLE_PRESETS.get(style, workflows.STYLE_PRESETS[workflows.DEFAULT_STYLE])
+        work_w, work_h = workflows.work_dimensions(in_w or 1024, in_h or 1024)
+        workflow = workflows.build_zimage_style_workflow(
+            comfy_name, work_w, work_h, prompt, denoise=strength
+        )
+
+        def on_progress(value: int, maximum: int, _node: str | None) -> None:
+            pct = round(value / maximum, 3) if maximum else 0
+            _publish(job_id, {"status": "processing", "stage": "generating", "progress": pct})
+
+        # Z-Image carga en frío puede tardar (encoder 4B); timeout generoso.
+        images = comfyui_service.run_with_progress(server_url, workflow, api_key, on_progress, timeout=900.0)
+        if not images:
+            raise RuntimeError("ComfyUI no devolvió ninguna imagen")
+
+        _publish(job_id, {"status": "processing", "stage": "downloading", "progress": 1})
+        first = images[0]
+        result = comfyui_service.download_image(
+            server_url, first["filename"], first.get("subfolder", ""), "output", api_key
+        )
+        ext = os.path.splitext(first["filename"])[1].lstrip(".") or "png"
+        processed_path = file_handlers.save_processed(job.user_id, ext, result)
+
+        job.processed_image_path = processed_path
+        job.status = JobStatus.COMPLETED.value
+        job.processing_time_seconds = int(time.monotonic() - started)
+        job.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        _publish(job_id, {"status": "completed", "job_id": job_id})
+
+    except Exception as exc:  # noqa: BLE001
+        try:
+            job = db.get(ProcessingJob, job_id)
+            if job is not None:
+                job.status = JobStatus.FAILED.value
+                job.error_message = str(exc)[:2000]
+                job.processing_time_seconds = int(time.monotonic() - started)
+                db.commit()
+        except Exception:
+            pass
+        _publish(job_id, {"status": "failed", "error": str(exc)[:500]})
+    finally:
+        db.close()
+
+
 @celery_app.task(name="process_inpaint_job")
 def process_inpaint_job(job_id: int, mask_path: str, grow: int = 8) -> None:
     """Elimina daño (manchas/arañazos) con LaMa sobre la zona enmascarada."""

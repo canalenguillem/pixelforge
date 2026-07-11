@@ -406,8 +406,14 @@ function SegTab({ active, onClick, icon: Icon, label }: {
   )
 }
 
+const STYLE_LABELS: Record<string, string> = {
+  oleo: 'Óleo', acuarela: 'Acuarela', anime: 'Anime',
+  comic: 'Cómic', lapiz: 'Lápiz', acrilico: 'Acrílico',
+}
+
 function jobLabel(j: Job): string {
   if (j.job_type === 'inpaint') return 'Manchas'
+  if (j.job_type === 'style') return STYLE_LABELS[String(j.params?.style)] ?? 'Estilo'
   if (j.workflow_mode === 'flux') return `Flux ${j.params?.flux_denoise ?? ''}`.trim()
   return `Epic ${j.params?.restoration_strength ?? ''}`.trim()
 }

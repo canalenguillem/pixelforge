@@ -22,6 +22,22 @@ export const jobService = {
     return data
   },
 
+  /** Encola un job de estilizado (Z-Image img2img): óleo, acuarela, anime… */
+  async createStyle(
+    uploadId: number,
+    style: string,
+    strength = 0.5,
+    parentJobId?: number,
+  ): Promise<Job> {
+    const { data } = await api.post<Job>('/jobs/style', {
+      upload_id: uploadId,
+      style,
+      strength,
+      parent_job_id: parentJobId,
+    })
+    return data
+  },
+
   /** Encola un job de inpaint (eliminar daño) con máscara. */
   async createInpaint(uploadId: number, mask: Blob, grow = 8, parentJobId?: number): Promise<Job> {
     const form = new FormData()
