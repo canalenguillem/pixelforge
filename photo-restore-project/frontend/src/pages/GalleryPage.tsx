@@ -79,7 +79,6 @@ function UploadGrid() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm('¿Borrar esta foto y TODOS sus procesados? No se puede deshacer.')) return
     setDeleting(id)
     try {
       await uploadService.remove(id)
@@ -200,7 +199,6 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   const navigate = useNavigate()
 
   async function handleDeleteJob(jobId: number) {
-    if (!window.confirm('¿Borrar este procesado?')) return
     setDeletingJob(jobId)
     try {
       await jobService.remove(jobId)
@@ -216,7 +214,6 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
   }
 
   async function handleDeleteUpload() {
-    if (!window.confirm('¿Borrar esta foto y TODOS sus procesados? No se puede deshacer.')) return
     try {
       await uploadService.remove(uploadId)
       navigate('/galeria')
