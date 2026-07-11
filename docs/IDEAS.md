@@ -58,14 +58,29 @@ Recortar personas / fondo transparente.
   `sams/sam_vit_b`.
 - Práctico y **rápido**. Salida PNG con alpha. Esfuerzo bajo.
 
-### 5. 🖼️ Generar (txt2img) con Z-Image Turbo
-Pestaña "describe y genera", muy rápida (pocos pasos).
-- **Modelos:** `z_image_bf16.safetensors` / `z_image-Q8_0.gguf` (generador
-  eficiente de Alibaba), text encoder **qwen** (`qwen_3_*` en DualCLIPLoader),
-  VAE `qwen_image_vae`.
-- Ojo: Z-Image es **generador**, no editor tipo Kontext → para restaurar NO
-  aporta; para **generar/estilizar** sí (su gracia es la velocidad).
-- Esfuerzo bajo-medio.
+### 5. 🖼️ Generar (txt2img) con Z-Image Turbo  ✅ RECETA PROBADA
+Pestaña "describe y genera", muy rápida (9 pasos). **Prototipo funcionando** —
+resultado en `foto_test/zimage_out.png` (calidad fotorrealista muy alta).
+
+**Grafo correcto (del workflow oficial `image_z_image_turbo.json`):**
+```
+UNETLoader(z_image_bf16.safetensors, default)
+  -> ModelSamplingAuraFlow(shift=3.0)         # ← CRÍTICO, si falta VAEDecode peta
+CLIPLoader(qwen_3_4b.safetensors, type="lumina2")   # ← lumina2, NO qwen_image
+VAELoader(ae.safetensors)                     # ← el VAE de Flux, NO qwen_image_vae
+CLIPTextEncode(clip, prompt)  -> pos
+ConditioningZeroOut(pos)      -> neg          # negativo (cfg=1)
+EmptySD3LatentImage(1024,1024,1)
+KSampler(model=ModelSampling, steps=9, cfg=1.0,
+         sampler="res_multistep", scheduler="simple", denoise=1.0)
+VAEDecode -> SaveImage
+```
+- **Es GENERADOR** (txt2img), no editor tipo Kontext → para restaurar NO aporta;
+  para **generar** sí. Su gracia: rápido (9 pasos). Carga en frío ~5min (qwen_3_4b
+  4B + z_image ~12GB en 16GB → swapping); en caliente, segundos.
+- Nota: `TextEncodeZImageOmni` (con `image1/2/3`) es para la variante **edición/omni**
+  con imágenes de referencia — otra vía a explorar.
+- Esfuerzo bajo-medio (es txt2img sin upload → endpoint/tarea nuevos).
 
 ### 6. ↔️ Expandir / Outpaint
 Extender bordes de fotos con encuadre apretado.
