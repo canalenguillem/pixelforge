@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Loader2, Sparkles, Eraser, Brush, Trash2, Zap } from 'lucide-react'
 import { MaskEditor, type MaskEditorHandle } from '@/components/Editor/MaskEditor'
+import { Lightbox } from '@/components/Common/Lightbox'
 import { jobService, waitForJob, type CreateJobPayload } from '@/services/job.service'
 import { apiError } from '@/services/api'
 import type { Job, WorkflowMode } from '@/types'
@@ -33,6 +34,7 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
   const [progress, setProgress] = useState(0)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(false)
   const maskRef = useRef<MaskEditorHandle>(null)
 
   async function runJob(create: () => Promise<Job>) {
@@ -83,11 +85,15 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
         <img
           src={source.imageUrl}
           alt="Fuente"
-          className="max-h-[45vh] w-full rounded-xl border border-border object-contain"
+          title="Clic para ampliar"
+          onClick={() => setZoom(true)}
+          className="max-h-[45vh] w-full cursor-zoom-in rounded-xl border border-border object-contain"
         />
       ) : (
         <MaskEditor ref={maskRef} imageUrl={source.imageUrl} brushSize={brushSize} />
       )}
+
+      {zoom && <Lightbox src={source.imageUrl} onClose={() => setZoom(false)} />}
 
       <div className="space-y-4 rounded-xl border border-border p-5">
         {mode === 'restore' ? (
