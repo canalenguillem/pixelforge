@@ -268,7 +268,7 @@ function UploadDetail({ uploadId }: { uploadId: number }) {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Link to="/galeria" className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
           <ArrowLeft className="h-4 w-4" /> Galería
         </Link>
