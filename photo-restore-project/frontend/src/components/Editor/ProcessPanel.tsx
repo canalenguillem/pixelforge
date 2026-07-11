@@ -27,7 +27,7 @@ export function ProcessPanel({ source, onDone }: ProcessPanelProps) {
   const [engine, setEngine] = useState<WorkflowMode>('epic')
   const [strength, setStrength] = useState(0.35)
   const [fidelity, setFidelity] = useState(0.5)
-  const [fluxDenoise, setFluxDenoise] = useState(0.9)
+  const [fluxDenoise, setFluxDenoise] = useState(1.0)
   const [enableHdr, setEnableHdr] = useState(true)
   const [colorize, setColorize] = useState(false)
   const [brushSize, setBrushSize] = useState(24)

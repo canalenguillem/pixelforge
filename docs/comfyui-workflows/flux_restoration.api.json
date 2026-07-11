@@ -113,7 +113,7 @@
         "encode",
         0
       ],
-      "denoise": 0.9
+      "denoise": 1.0
     }
   },
   "dec": {

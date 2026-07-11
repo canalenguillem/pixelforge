@@ -60,7 +60,7 @@ def enqueue_restoration(
     workflow_mode: str = "epic",
     restoration_strength: float = 0.35,
     codeformer_fidelity: float = 0.5,
-    flux_denoise: float = 0.85,
+    flux_denoise: float = 1.0,
     enable_hdr_lora: bool = False,
     colorize: bool = False,
 ) -> ProcessingJob:

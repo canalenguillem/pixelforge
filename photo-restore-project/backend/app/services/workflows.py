@@ -170,7 +170,7 @@ def build_restoration_workflow(
 
 def build_restoration_flux_workflow(
     image_name: str,
-    denoise: float = 0.85,
+    denoise: float = 1.0,
     colorize: bool = False,
     use_hdr_lora: bool = False,
     guidance: float = 2.5,
