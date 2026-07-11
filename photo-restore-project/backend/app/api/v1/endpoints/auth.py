@@ -4,6 +4,7 @@ from fastapi import APIRouter, status
 from jose import JWTError
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.config import settings
 from app.core.security import (
     REFRESH_TOKEN_TYPE,
     create_access_token,
@@ -13,14 +14,20 @@ from app.core.security import (
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
 from app.schemas.user import UserRead
 from app.services import auth_service, user_service
-from app.utils.exceptions import AuthError
+from app.utils.exceptions import AppError, AuthError
 
 router = APIRouter()
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register(data: RegisterRequest, db: DbSession) -> UserRead:
-    """Registra un usuario nuevo (con subscription free por defecto)."""
+    """Registra un usuario nuevo (con subscription free por defecto).
+
+    El registro público está desactivado (el alta será por invitación). Se
+    reactiva con ALLOW_REGISTRATION=true.
+    """
+    if not settings.ALLOW_REGISTRATION:
+        raise AppError("El registro está deshabilitado", 403)
     user = auth_service.register_user(db, data)
     return UserRead.model_validate(user)
 

@@ -5,14 +5,13 @@ import { authService } from '@/services/auth.service'
 import { apiError } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 
-/** Login + registro en una sola pantalla (toggle). */
+/** Pantalla de acceso. El registro público está desactivado: el alta será por
+ * invitación (link). Para reactivarlo, restaurar el modo 'register'. */
 export function LoginPage() {
   const navigate = useNavigate()
   const { setTokens, setUser } = useAuthStore()
 
-  const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
-  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -22,9 +21,6 @@ export function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      if (mode === 'register') {
-        await authService.register({ email, username, password })
-      }
       const tokens = await authService.login(email, password)
       setTokens(tokens.access_token, tokens.refresh_token)
       setUser(await authService.me())
@@ -44,9 +40,7 @@ export function LoginPage() {
             <Camera className="h-6 w-6 text-primary" />
           </div>
           <h1 className="text-xl font-semibold">PixelForge</h1>
-          <p className="text-sm text-muted-foreground">
-            {mode === 'login' ? 'Inicia sesión para restaurar tus fotos' : 'Crea tu cuenta'}
-          </p>
+          <p className="text-sm text-muted-foreground">Inicia sesión para restaurar tus fotos</p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
@@ -62,27 +56,11 @@ export function LoginPage() {
             />
           </div>
 
-          {mode === 'register' && (
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Usuario</label>
-              <input
-                type="text"
-                required
-                minLength={3}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="nombre_usuario"
-              />
-            </div>
-          )}
-
           <div className="space-y-1">
             <label className="text-sm font-medium">Contraseña</label>
             <input
               type="password"
               required
-              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -100,19 +78,13 @@ export function LoginPage() {
             className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
+            Entrar
           </button>
         </form>
 
-        <button
-          onClick={() => {
-            setMode(mode === 'login' ? 'register' : 'login')
-            setError(null)
-          }}
-          className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          {mode === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
-        </button>
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          El acceso es por invitación.
+        </p>
       </div>
     </div>
   )

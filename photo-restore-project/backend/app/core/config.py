@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
+    # Registro público abierto. Desactivado: el alta será por invitación (link).
+    # Reactivar poniendo ALLOW_REGISTRATION=true en el entorno cuando exista.
+    ALLOW_REGISTRATION: bool = False
+
     # --- URLs ----------------------------------------------------------------
     BACKEND_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:5173"
