@@ -78,8 +78,10 @@ VAEDecode -> SaveImage
 - **Es GENERADOR** (txt2img), no editor tipo Kontext → para restaurar NO aporta;
   para **generar** sí. Su gracia: rápido (9 pasos). Carga en frío ~5min (qwen_3_4b
   4B + z_image ~12GB en 16GB → swapping); en caliente, segundos.
-- Nota: `TextEncodeZImageOmni` (con `image1/2/3`) es para la variante **edición/omni**
-  con imágenes de referencia — otra vía a explorar.
+- Nota: `TextEncodeZImageOmni` (con `image1/2/3`) es para la variante **edición/omni**.
+  **PROBADO y NO funciona con `z_image_bf16`** → produce ruido (`foto_test/zimage_edit.png`).
+  Requiere el checkpoint **Z-Image-Omni/Edit** (no instalado). Para EDITAR fotos,
+  **Kontext sigue siendo el tool**; Z-Image aquí = solo txt2img.
 - Esfuerzo bajo-medio (es txt2img sin upload → endpoint/tarea nuevos).
 
 ### 6. ↔️ Expandir / Outpaint
